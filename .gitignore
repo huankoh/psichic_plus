@@ -7,7 +7,7 @@ runs/
 *.log
 *.tmp
 
-# Public releases do not ship pretrained model weights.
+# Track the release checkpoint, but ignore other generated model artifacts.
 trained_weights/**/*.pt
 trained_weights/**/*.pth
 trained_weights/**/*.ckpt
@@ -19,3 +19,5 @@ trained_weights/**/*.pkl
 trained_weights/**/*.pickle
 trained_weights/**/*.joblib
 trained_weights/**/*.npz
+!trained_weights/PSICHIC_plus/degree.pt
+!trained_weights/PSICHIC_plus/model.pt
