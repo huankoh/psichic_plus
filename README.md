@@ -11,24 +11,6 @@ This repository is intended for non-commercial research and evaluation. APIs,
 checkpoint formats, model behavior, and package layout may change before a
 stable release.
 
-## Pretrained Weights
-
-Pretrained `psichic_plus` model weights are not included in this repository.
-
-The default checkpoint directory is:
-
-```text
-trained_weights/PSICHIC_plus/
-  config.json
-  degree.pt
-  model.pt
-```
-
-Only `config.json` is tracked. The `degree.pt` and `model.pt` checkpoint files
-must be supplied separately before inference or few-shot fine-tuning can run.
-You can either place compatible local files in the default directory or pass a
-different checkpoint directory with `--model_dir`.
-
 ## Environment Setup
 
 `psichic_plus` has been validated on macOS, Linux, and Windows. Conda or
@@ -77,21 +59,12 @@ If the CSV file does not include an `ID` column, row IDs are generated as
 
 ## Inference
 
-Run prediction with the default checkpoint directory:
+Run prediction:
 
 ```bash
 python inference.py \
   --input_file YOUR_CSV.csv \
   --output_folder YOUR_OUTPUT_DIR
-```
-
-Or provide a separate checkpoint directory:
-
-```bash
-python inference.py \
-  --input_file YOUR_CSV.csv \
-  --output_folder YOUR_OUTPUT_DIR \
-  --model_dir /path/to/PSICHIC_plus_checkpoint
 ```
 
 Predictions are written to:
