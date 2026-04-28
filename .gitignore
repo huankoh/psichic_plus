@@ -1,0 +1,21 @@
+__pycache__/
+*.py[cod]
+.DS_Store
+.env
+.venv/
+runs/
+*.log
+*.tmp
+
+# Public releases do not ship pretrained model weights.
+trained_weights/**/*.pt
+trained_weights/**/*.pth
+trained_weights/**/*.ckpt
+trained_weights/**/*.safetensors
+trained_weights/**/*.bin
+trained_weights/**/*.onnx
+trained_weights/**/*.h5
+trained_weights/**/*.pkl
+trained_weights/**/*.pickle
+trained_weights/**/*.joblib
+trained_weights/**/*.npz

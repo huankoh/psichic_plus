@@ -1,0 +1,36 @@
+PSICHIC-plus Alpha Non-Commercial Research License
+
+Copyright (c) 2026 Huan Yee Koh and contributors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to use,
+copy, modify, merge, publish, distribute, and make derivative works of the
+Software solely for non-commercial research, academic, educational, and
+evaluation purposes, subject to the conditions below.
+
+Commercial use is not permitted without prior written permission from the
+copyright holder. Commercial use includes, without limitation, use of the
+Software or derivatives in connection with any paid product or service,
+commercial research or development, fee-for-service activity, product
+development, clinical or production decision support, consulting engagement,
+or other activity intended for commercial advantage or monetary compensation.
+
+Redistributions of the Software or derivative works must retain this license
+notice and all copyright, attribution, and third-party notices. This license
+does not grant rights to any pretrained model weights, datasets, trademarks,
+service marks, or logos unless those rights are expressly provided in writing.
+
+Pretrained PSICHIC-plus model weights are not included in this public alpha /
+pre-release. Any separately provided weights, datasets, or external artifacts
+may be subject to additional terms.
+
+Third-party components included in this repository remain governed by their
+own license terms.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE, TITLE, AND NON-INFRINGEMENT. IN NO EVENT
+SHALL THE AUTHORS, COPYRIGHT HOLDERS, OR CONTRIBUTORS BE LIABLE FOR ANY CLAIM,
+DAMAGES, OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT, OR
+OTHERWISE, ARISING FROM, OUT OF, OR IN CONNECTION WITH THE SOFTWARE OR THE USE
+OR OTHER DEALINGS IN THE SOFTWARE.
