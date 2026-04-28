@@ -1,7 +1,7 @@
-# PSICHIC-plus Checkpoint Directory
+# psichic_plus Checkpoint Directory
 
 This public alpha / pre-release intentionally does not include pretrained
-PSICHIC-plus weight files.
+psichic_plus weight files.
 
 Expected local-only files for inference:
 

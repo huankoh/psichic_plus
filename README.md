@@ -1,8 +1,8 @@
-# PSICHIC-plus Alpha
+# psichic_plus
 
 **Public alpha / pre-release.**
 
-PSICHIC-plus Alpha is an unpublished extension of the published
+`psichic_plus` is an unpublished extension of the published
 [PSICHIC platform](https://github.com/huankoh/PSICHIC). It provides research
 code for uncertainty-aware binding-affinity prediction directly from protein
 sequence and ligand SMILES inputs.
@@ -13,7 +13,7 @@ stable release.
 
 ## Pretrained Weights
 
-Pretrained PSICHIC-plus model weights are not included in this repository.
+Pretrained `psichic_plus` model weights are not included in this repository.
 
 The default checkpoint directory is:
 
@@ -31,7 +31,7 @@ different checkpoint directory with `--model_dir`.
 
 ## Environment Setup
 
-PSICHIC-plus Alpha has been validated on macOS, Linux, and Windows. Conda or
+`psichic_plus` has been validated on macOS, Linux, and Windows. Conda or
 mamba is recommended.
 
 ```bash
@@ -118,7 +118,7 @@ Interpretation outputs are written under `YOUR_OUTPUT_DIR/interpretations/`:
 
 ## Related Work
 
-PSICHIC-plus Alpha builds on the published PSICHIC platform:
+`psichic_plus` builds on the published PSICHIC platform:
 
 - Code: https://github.com/huankoh/PSICHIC
 - Demo for the previous PSICHIC model: https://www.psichicwebserver.com
