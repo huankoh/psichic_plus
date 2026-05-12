@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+.DS_Store
+.env
+.venv/
+runs/
+*.log
+*.tmp
+*.nsys-rep
+*.qdrep
+*.sqlite

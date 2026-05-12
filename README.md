@@ -11,6 +11,20 @@ This repository is intended for non-commercial research and evaluation. APIs,
 checkpoint formats, model behavior, and package layout may change before a
 stable release.
 
+## Fast Screening Runtime
+
+For the CUDA 12.4 / PyTorch 2.6 / PyG 2.7 Docker runtime used for high
+throughput screening, use:
+
+```text
+psichic_plus_screening/
+```
+
+That folder is a slim, standalone screening bundle with the validated
+`fast_screening` default preset, standard molecular screening mode, and
+protein-size batching mode for varied-protein or proteome-wide screens. It does
+not include benchmark fixtures, optimization reports, or profiling artifacts.
+
 ## Environment Setup
 
 `psichic_plus` has been validated on macOS, Linux, and Windows. Conda or
