@@ -1,0 +1,76 @@
+# syntax=docker/dockerfile:1
+
+FROM nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04
+
+ARG MAMBAFORGE_VERSION=23.11.0-0
+ARG ENV_NAME=psichic_fp
+ARG VERSION=cuda12.4-torch2.6-pyg2.7
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    MAMBA_ROOT_PREFIX=/opt/conda \
+    PATH=/opt/conda/envs/${ENV_NAME}/bin:/opt/conda/bin:${PATH} \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    NVIDIA_VISIBLE_DEVICES=all \
+    NVIDIA_DRIVER_CAPABILITIES=compute,utility \
+    PSICHIC_PLUS_RUNTIME_STACK="${VERSION}" \
+    PSICHIC_PLUS_DEFAULT_PRESET=fast_screening
+
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        bzip2 \
+        ca-certificates \
+        curl \
+        git \
+        tini \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN curl -fsSL \
+        "https://github.com/conda-forge/miniforge/releases/download/${MAMBAFORGE_VERSION}/Mambaforge-${MAMBAFORGE_VERSION}-Linux-x86_64.sh" \
+        -o /tmp/mambaforge.sh \
+    && bash /tmp/mambaforge.sh -b -p /opt/conda \
+    && rm /tmp/mambaforge.sh \
+    && /opt/conda/bin/mamba clean -afy
+
+WORKDIR /opt/min-psichic_plus
+
+COPY docker/environment-gpu-a40.yml ./environment-gpu-a40.yml
+RUN /opt/conda/bin/mamba env create -f environment-gpu-a40.yml \
+    && /opt/conda/bin/mamba clean -afy
+
+RUN /opt/conda/bin/conda run -n ${ENV_NAME} python - <<'PY'
+import torch
+import torch_geometric
+import torch_scatter
+
+assert torch.__version__ == "2.6.0+cu124", torch.__version__
+assert torch.version.cuda == "12.4", torch.version.cuda
+assert torch_geometric.__version__ == "2.7.0", torch_geometric.__version__
+assert torch_scatter.__version__ == "2.1.2+pt26cu124", torch_scatter.__version__
+PY
+
+COPY . .
+
+RUN /opt/conda/bin/conda run -n ${ENV_NAME} python -m py_compile \
+        psichic_model.py \
+        featurizers.py \
+        inference.py \
+        multi_gpu_inference.py \
+        papyrus_structure_pipeline/__init__.py \
+        papyrus_structure_pipeline/standardizer.py
+
+ARG BUILD_DATE=unknown
+ARG VCS_REF=unknown
+LABEL org.opencontainers.image.title="min-psichic_plus" \
+      org.opencontainers.image.description="Standalone PSICHIC+ CUDA 12.4 screening runtime" \
+      org.opencontainers.image.source="https://github.com/huankoh/min-psichic_plus" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.revision="${VCS_REF}" \
+      org.opencontainers.image.created="${BUILD_DATE}" \
+      org.opencontainers.image.vendor="PSICHIC+" \
+      org.opencontainers.image.licenses="Private; see third_party_licenses/"
+
+ENTRYPOINT ["/usr/bin/tini", "--"]
+CMD ["python", "inference.py", "--help"]
