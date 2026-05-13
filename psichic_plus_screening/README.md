@@ -15,7 +15,6 @@ papyrus_structure_pipeline/          # vendored ligand standardizer
 pretrained_weights/PSICHIC_plus/     # config.json, degree.pt, model.pt
 docker/Dockerfile.gpu                # CUDA 12.4 / Torch 2.6 / PyG 2.7 image
 docker/environment-gpu-a40.yml       # pinned GPU environment
-third_party_licenses/                # bundled dependency license metadata
 ```
 
 The CLI defaults to the validated fast path:
@@ -113,3 +112,9 @@ This bundle intentionally does not include:
 - optimization history
 - verifier-only scripts
 - Docker upgrade sandboxes
+
+## Acknowledgements
+
+This bundle vendors ligand standardization code from
+`papyrus-structure-pipeline` version `0.0.5`, licensed under the MIT License.
+Copyright (c) 2023 Olivier J. M. Béquignon.

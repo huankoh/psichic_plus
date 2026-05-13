@@ -70,7 +70,7 @@ LABEL org.opencontainers.image.title="min-psichic_plus" \
       org.opencontainers.image.revision="${VCS_REF}" \
       org.opencontainers.image.created="${BUILD_DATE}" \
       org.opencontainers.image.vendor="PSICHIC+" \
-      org.opencontainers.image.licenses="Private; see third_party_licenses/"
+      org.opencontainers.image.licenses="Private; bundled Papyrus standardizer MIT acknowledgement in README.md"
 
 ENTRYPOINT ["/usr/bin/tini", "--"]
 CMD ["python", "inference.py", "--help"]
