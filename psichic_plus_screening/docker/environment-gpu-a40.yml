@@ -1,0 +1,36 @@
+name: psichic_fp
+# Accepted default GPU runtime as of 2026-05-12. CUDA 12.4 passed the
+# screening-runtime gate on A40 and replaces the older CUDA 11.8 default image.
+channels:
+  - nvidia
+  - conda-forge
+dependencies:
+  - python=3.12
+  - numpy=1.26.4
+  - pandas=2.2.2
+  - scipy=1.13.1
+  - rdkit=2024.03.3
+  - biopython
+  - pip
+  - pip:
+      - --extra-index-url https://download.pytorch.org/whl/cu124
+      - --find-links https://data.pyg.org/whl/torch-2.6.0+cu124.html
+      - torch==2.6.0+cu124
+      - torchvision==0.21.0+cu124
+      - torchaudio==2.6.0+cu124
+      - pyg-lib==0.5.0+pt26cu124
+      - torch-scatter==2.1.2+pt26cu124
+      - torch-sparse==0.6.18+pt26cu124
+      - torch-cluster==1.6.3+pt26cu124
+      - torch-spline-conv==1.2.2+pt26cu124
+      - torch-geometric==2.7.0
+      - fair-esm==2.0.0
+      - biopandas
+      - timeout_decorator
+      - py3Dmol
+      - umap-learn
+      - plotly
+      - mplcursors
+      - lifelines
+      - reprint
+      - chembl-structure-pipeline==1.2.4

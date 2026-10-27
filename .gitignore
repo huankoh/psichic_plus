@@ -1,0 +1,23 @@
+__pycache__/
+*.py[cod]
+.DS_Store
+.env
+.venv/
+runs/
+*.log
+*.tmp
+
+# Track the release checkpoint, but ignore other generated model artifacts.
+trained_weights/**/*.pt
+trained_weights/**/*.pth
+trained_weights/**/*.ckpt
+trained_weights/**/*.safetensors
+trained_weights/**/*.bin
+trained_weights/**/*.onnx
+trained_weights/**/*.h5
+trained_weights/**/*.pkl
+trained_weights/**/*.pickle
+trained_weights/**/*.joblib
+trained_weights/**/*.npz
+!trained_weights/PSICHIC_plus/degree.pt
+!trained_weights/PSICHIC_plus/model.pt
