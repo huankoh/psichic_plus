@@ -15,4 +15,6 @@ The vendored standardizer accepts the native tautomer picker.
 The original license and salts/solvents data are retained in that directory.
 
 normalization/native/tautomer_ext.cpp includes adapted RDKit
-Release_2024_03_3 code under its BSD license, retained in the source.
+Release_2024_03_3 code under its BSD license.
+The license is retained in licenses/RDKit-BSD-3-Clause.txt.
+The PSICHIC+ non-commercial research license is retained in LICENSE.

@@ -1,8 +1,10 @@
-# PSICHIC+ Production Runtime Bundle
+# PSICHIC+ screening runtime
 
-This folder is the slim production-facing PSICHIC+ runtime bundle. It is copied
-from the validated minimal package, but excludes benchmark fixtures, profiling
-artifacts, optimization logs, validation reports, and sandbox Docker images.
+
+The screening CLI uses the installed `psichic_ligand` package shared with root inference.
+Its frozen v1 contract currently has no supported platform, so new package and Docker builds refuse to proceed.
+See [the root build status](../README.md#ligand-build-status) before using the commands below.
+The CLI and cache behavior were checked locally on CPU; the image and GPU run are not verified for this port.
 
 ## Contents
 
@@ -10,30 +12,28 @@ artifacts, optimization logs, validation reports, and sandbox Docker images.
 inference.py                         # primary screening CLI
 multi_gpu_inference.py               # data-parallel row-sharding wrapper
 psichic_model.py                     # model definition and fast inference modes
-featurizers.py                       # ligand/protein featurization
-papyrus_structure_pipeline/          # vendored ligand standardizer
+featurizers.py                       # protein graphs and shared ligand-store adapters
 pretrained_weights/PSICHIC_plus/     # config.json, degree.pt, model.pt
 docker/Dockerfile.gpu                # CUDA 12.4 / Torch 2.6 / PyG 2.7 image
-docker/environment-gpu-a40.yml       # pinned GPU environment
+../environment_gpu.yml              # shared pinned GPU environment
+../psichic-ligand/                   # installed ligand package
 ```
 
-The CLI defaults to the validated fast path:
+The CLI defaults to these inference settings:
 
 ```text
 --inference_preset fast_screening
 --precision fp32
 ```
 
-For molecular screening against one or a few proteins, keep input-order
-batching:
+For molecular screening against one or a few proteins, keep input-order batching:
 
 ```text
 --batching_strategy input_order
 --batch_size 128
 ```
 
-For proteome-wide or varied-protein screening on A40-class memory, use
-protein-size batching:
+For proteome-wide or varied-protein screening on A40-class memory, use protein-size batching:
 
 ```text
 --batching_strategy protein_size_bucketed
@@ -42,15 +42,19 @@ protein-size batching:
 
 ## Build
 
+Run from the repository root.
+The image builds the ligand package and runs `python -m psichic_ligand verify` before copying the screening scripts.
+A failed contract or unsupported platform stops the image build.
+
 ```bash
 docker build --platform linux/amd64 \
   --build-arg VCS_REF="$(git rev-parse --short HEAD 2>/dev/null || echo production-bundle)" \
   --build-arg BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-  -f docker/Dockerfile.gpu \
+  -f psichic_plus_screening/docker/Dockerfile.gpu \
   -t psichic-plus-production:gpu .
 ```
 
-## Standard Screening
+## Standard screening
 
 Input can be a ligand CSV plus one FASTA file:
 
@@ -74,10 +78,9 @@ docker run --rm --gpus all --shm-size=16g \
     --metrics_json runs/screen_metrics.json
 ```
 
-## Proteome-Wide Screening
+## Proteome-wide screening
 
-Use this when the input CSV already carries protein identifiers and sequences,
-or when screening many different proteins:
+Use this when the input CSV carries protein identifiers and sequences, or when screening many proteins:
 
 ```bash
 mkdir -p runs/torch_cache runs/proteome
@@ -98,9 +101,8 @@ docker run --rm --gpus all --shm-size=32g \
     --metrics_json runs/proteome_metrics.json
 ```
 
-The `runs/torch_cache` mount persists the Fair ESM checkpoint cache across
-ephemeral containers. Without it, the first protein-featurization run downloads
-the ESM backbone inside the container.
+The `runs/torch_cache` mount persists the Fair ESM checkpoint cache across ephemeral containers.
+The first protein-featurization run downloads the ESM backbone when the cache is empty.
 
 ## Exclusions
 
@@ -113,8 +115,17 @@ This bundle intentionally does not include:
 - verifier-only scripts
 - Docker upgrade sandboxes
 
+## Ligand cache
+
+Pass `--ligand_cache_dir runs/ligands` to share a persistent cache across runs.
+Graphs live below the `FEATURIZATION_VERSION` subdirectory, currently `rdkit-2024.03.3-enumpick-max100-v1+psichic-graph-v1`.
+Legacy unversioned cache files are ignored and remain untouched.
+A second run uses the stored graphs without featurization, including shape precompute and interpretation.
+`--no-ligand_disk_cache` disables persistent ligand graph storage.
+Metrics record `ligand_featurization_version`.
+
 ## Acknowledgements
 
-This bundle vendors ligand standardization code from
-`papyrus-structure-pipeline` version `0.0.5`, licensed under the MIT License.
-Copyright (c) 2023 Olivier J. M. Béquignon.
+Papyrus 0.0.5 and ChEMBL Structure Pipeline 1.2.4 are vendored once inside `psichic-ligand` with their MIT licenses.
+The adapted RDKit code retains its BSD notice.
+See [psichic-ligand/NOTICE](../psichic-ligand/NOTICE) and the files it names.
