@@ -15,7 +15,7 @@ from pathlib import Path
 from pybind11.setup_helpers import Pybind11Extension, build_ext
 from setuptools import setup
 
-SUPPORTED_SUBDIRS = ("osx-64",)
+SUPPORTED_SUBDIRS = ()
 RDKIT_LIBRARIES = (
     "RDKitGraphMol",
     "RDKitSmilesParse",
@@ -77,7 +77,7 @@ def locate_rdkit_toolchain() -> RdkitToolchain:
     if subdir not in SUPPORTED_SUBDIRS:
         raise BuildEnvironmentError(
             f"psichic-ligand: {subdir} has not passed the byte-identity contract "
-            f"(verified: {', '.join(SUPPORTED_SUBDIRS)}). Refusing to build an unverified featurizer."
+            f"(verified: {', '.join(SUPPORTED_SUBDIRS) or 'none'}). Refusing to build an unverified featurizer."
         )
     if sys.version_info[:2] != (3, 12):
         raise BuildEnvironmentError(

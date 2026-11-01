@@ -6,15 +6,29 @@ on:
   workflow_dispatch:
 
 jobs:
+  portability:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Require a verified ligand platform
+        run: |
+          python - <<'PY'
+          import ast
+          from pathlib import Path
+          tree = ast.parse(Path("psichic-ligand/setup.py").read_text())
+          supported = next(ast.literal_eval(n.value) for n in tree.body if isinstance(n, ast.Assign) and any(isinstance(t, ast.Name) and t.id == "SUPPORTED_SUBDIRS" for t in n.targets))
+          if not supported:
+              raise SystemExit("No platform passed the frozen v1 contract. A parent-approved graph version is required before release.")
+          PY
   ligand:
+    if: ${{ false }}
     name: ligand (${{ matrix.subdir }}, ${{ matrix.env }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - {os: macos-15-intel, subdir: osx-64, env: osx}
+        include: []
     defaults:
       run:
         shell: bash -el {0}
