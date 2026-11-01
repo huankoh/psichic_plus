@@ -1,4 +1,5 @@
 """Load installed native extensions after checking RDKit provenance."""
+
 import importlib
 import os
 import sys
@@ -13,7 +14,9 @@ def load_native(qualified_name: str) -> ModuleType:
     from .normalization.tautomer_contract import RDKIT_RELEASE
 
     path = Path(rdkit.__file__).resolve()
-    if rdkit.__version__ != RDKIT_RELEASE or not path.is_relative_to(Path(sys.prefix).resolve()):
+    if rdkit.__version__ != RDKIT_RELEASE or not path.is_relative_to(
+        Path(sys.prefix).resolve()
+    ):
         raise ImportError(
             f"psichic_ligand was built for RDKit {RDKIT_RELEASE} but this process loads "
             f"RDKit {rdkit.__version__} from {path}. "

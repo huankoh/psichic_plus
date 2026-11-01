@@ -220,4 +220,3 @@ def test_recorded_chemistry_reaches_stable_molecule_and_graph(raw, expected):
         assert graph_digest(smiles_to_graph(actual.smiles, one_hot)) == graph_digest(
             smiles_to_graph(repeat.smiles, one_hot),
         )
-
