@@ -1,0 +1,8 @@
+chemfunc==1.0.12
+chemprop==1.6.1
+descriptastorus==2.8.0
+typed-argument-parser==1.10.1
+wandb==0.19.11
+gdown>=5,<6
+openpyxl>=3.1,<4
+seaborn>=0.13,<0.14
