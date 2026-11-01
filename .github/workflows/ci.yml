@@ -33,10 +33,21 @@ jobs:
           environment-file: environment_${{ matrix.env }}.yml
           activate-environment: psichic_fp
           auto-activate-base: false
+      - name: Configure Linux shared library search
+        if: runner.os == 'Linux'
+        run: echo "LD_LIBRARY_PATH=$CONDA_PREFIX/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" >> "$GITHUB_ENV"
       - name: Build the installed package
         run: pip install --no-build-isolation --no-deps ./psichic-ligand
       - name: Verify byte identity
         run: python -m psichic_ligand verify
+      - name: Record contract diagnostics
+        if: failure()
+        run: python psichic-ligand/tests/diagnose_build.py ligand-diagnostics.json
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: diagnostics-${{ matrix.subdir }}-${{ matrix.env }}
+          path: ligand-diagnostics.json
       - name: Install test dependencies
         run: |
           pip install pytest PyYAML
