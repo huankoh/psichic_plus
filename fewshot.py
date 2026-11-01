@@ -160,19 +160,16 @@ def main():
         ligand_path = os.path.join(args.datafolder, 'ligands')
         if not os.path.exists(ligand_path):
             os.makedirs(ligand_path)
-        ligand_dict = {}
 
         train_dataset = ProteinMoleculeDataset(
-            train_df, ligand_dict, 
-            ligand_path, 
+            train_df, molecule_folder=ligand_path,
             protein_dict=protein_dict,
             protein_folder=None,
             result_path=args.result_path, 
             dataset_tag='train', device=args.device
         )
         test_dataset = ProteinMoleculeDataset(
-            test_df, ligand_dict, 
-            ligand_path, 
+            test_df, molecule_folder=ligand_path,
             protein_dict=protein_dict,
             protein_folder=None,
             result_path=args.result_path, 

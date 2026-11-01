@@ -1,0 +1,4 @@
+ID,Ligand,Protein,Protein_Sequence
+e2e-0,CC(=O)Oc1ccccc1C(=O)O,test-protein,MKTAYIAKQRQISFVKSHFSRQDILD
+e2e-1,Cn1c(=O)c2c(ncn2C)n(C)c1=O,test-protein,MKTAYIAKQRQISFVKSHFSRQDILD
+e2e-2,C1CCCCCCC1,test-protein,MKTAYIAKQRQISFVKSHFSRQDILD

@@ -59,7 +59,7 @@ def main():
     if 'ID' in df.columns:
         id_series = df['ID'].astype(str)
         id_series = id_series.replace(['', 'nan', 'NaN', 'None'], pd.NA)
-        default_ids = "Row_" + (df.index + 1).astype(str)
+        default_ids = pd.Series("Row_" + (df.index + 1).astype(str), index=df.index)
         ids = id_series.fillna(default_ids).tolist()
     else:
         ids = "Row_" + (df.index + 1).astype(str)
@@ -90,7 +90,7 @@ def main():
 
     # Create dataset and DataLoader
     dataset = ProteinMoleculeDataset(
-        df, molecule_dict={}, molecule_folder=ligand_path, protein_dict=protein_dict,
+        df, molecule_folder=ligand_path, protein_dict=protein_dict,
         protein_folder=None, result_path=args.output_folder, dataset_tag='inference', device=device
     )
     loader = DataLoader(dataset, batch_size=args.batch_size, shuffle=False,
@@ -102,7 +102,7 @@ def main():
     result_df = virtual_screening(
         df, model, loader, args.output_folder + "/interpretations",
         save_interpret=args.save_interpret,
-        ligand_path=ligand_path,
+        ligands=dataset.ligands,
         protein_dict=protein_dict,
         device=device,
         save_cluster=False

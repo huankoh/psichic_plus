@@ -275,10 +275,10 @@ class net(torch.nn.Module):
         residue_x = self.prot_aa(residue_x) + self.prot_evo(residue_evo_x)
        
         # MOLECULE Featurize
-        atom_x = self.atom_type_encoder(mol_x.squeeze()) + self.atom_feat_encoder(mol_x_feat)
+        atom_x = self.atom_type_encoder(mol_x.view(-1)) + self.atom_feat_encoder(mol_x_feat)
 
         # Clique Featurize
-        clique_x = self.clique_encoder(clique_x.squeeze())
+        clique_x = self.clique_encoder(clique_x.view(-1))
         # clique_id = clique_x.squeeze()
         ortho_loss = torch.tensor(0.).to(self.device)
         cluster_loss = torch.tensor(0.).to(self.device)
