@@ -1507,8 +1507,8 @@ class PSICHICPlusNet(nn.Module):
                 residue_x = None
             else:
                 residue_x = self.prot_aa(raw_residue_x) + self.prot_evo(raw_residue_evo_x)
-            atom_x = self.atom_type_encoder(mol_x.squeeze()) + self.atom_feat_encoder(mol_x_feat)
-            clique_x = self.clique_encoder(clique_x.squeeze())
+            atom_x = self.atom_type_encoder(mol_x.view(-1)) + self.atom_feat_encoder(mol_x_feat)
+            clique_x = self.clique_encoder(clique_x.view(-1))
 
             ortho_loss = torch.zeros((), device=device, dtype=torch.float32)
             cluster_loss = torch.zeros((), device=device, dtype=torch.float32)
