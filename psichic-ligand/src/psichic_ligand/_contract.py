@@ -65,9 +65,19 @@ class VerifyReport:
         return not self.mismatches
 
 
+# clique_pe is 20 chained float32 matmuls, so every BLAS rounds it differently and its bytes
+# are not reproducible even between two machines of the same platform. It is also a deterministic
+# function of tree_edge_index and clique_num_nodes, which are compared exactly, so hashing it
+# would only test the local BLAS.
+DIGEST_EXCLUDED_KEYS = frozenset({"clique_pe"})
+DIGEST_ALGORITHM = "sha256-bench-v2-no-clique-pe"
+
+
 def graph_digest(graph: Mapping[str, object]) -> str:
     h = hashlib.sha256()
     for key in sorted(graph, key=str):
+        if key in DIGEST_EXCLUDED_KEYS:
+            continue
         h.update(f"k:{key};".encode())
         value = graph[key]
         if isinstance(value, torch.Tensor):
@@ -92,7 +102,7 @@ def load_contract(version: str) -> tuple[ContractHeader, list[ContractRow]]:
     if (
         header.contract != version
         or header.rdkit != RDKIT_RELEASE
-        or header.digest != "sha256-bench-v1"
+        or header.digest != DIGEST_ALGORITHM
         or header.rows != len(rows)
     ):
         raise ValueError(f"Invalid ligand contract header for {version}")

@@ -4,6 +4,8 @@ import hashlib
 def graph_digest(graph):
     h = hashlib.sha256()
     for key in sorted(graph):
+        if key == "clique_pe":  # BLAS-dependent bytes, see psichic_ligand._contract
+            continue
         h.update(f"k:{key};".encode())
         value = graph[key]
         if hasattr(value, "detach"):

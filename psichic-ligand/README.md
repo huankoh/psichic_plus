@@ -79,7 +79,7 @@ Every row was independently checked with the untouched Python 3.12 conda-forge b
 The generator remains outside this repository.
 
 The graph digest hashes sorted keys and each tensor's dtype, shape, and contiguous CPU bytes.
-It uses the original benchmark's `sha256-bench-v1` algorithm without a tolerance.
+It uses the `sha256-bench-v2-no-clique-pe` algorithm, which compares every graph key exactly except `clique_pe`. That key is 20 chained float32 matmuls whose bytes depend on the local BLAS, and it is derived from `tree_edge_index` and `clique_num_nodes`, which are compared exactly.
 
 ## Notices
 
