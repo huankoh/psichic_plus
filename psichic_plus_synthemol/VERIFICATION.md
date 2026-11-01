@@ -167,3 +167,31 @@ Its first concurrent AdaptiveFlow run had a worker terminated by signal 9 and re
 The cause was not proven.
 Fresh serial output is under `runs/independent/adaptive/serial`.
 Core dependencies are pinned, but ranged auxiliary dependencies and the tagged base mean future builds are not fully locked.
+
+## Final independent image verification
+
+A fresh verification worker rebuilt commit `7731c6845341124f0f1c6f1e1f1b217832e0b890` as `psichic-workflows:final` for `linux/amd64`.
+The final image ID is `sha256:b371dc5c28b3ea14ab6ecfec1f6e8f13ffdd9afe3e50b254c6f57941391834a9`.
+The build log is `runs/final-independent/build.log`.
+The exact serial container commands and mounts are recorded in `runs/final-independent/run-verifiers.sh`.
+
+Both SyntheMol chemical spaces passed generation and provenance checks in the final image.
+Each predicted affinity was `1.6210296154022217`, with maximum absolute difference `0.0` against direct inference in the same image.
+The undersized ligand rejection remained visible.
+See `runs/final-independent/synthemol/verification.json`.
+The CPU container value differs slightly from the earlier host value, so exact equality is asserted only against direct inference in the same runtime.
+
+AdaptiveFlow passed using `/opt/AdaptiveFlow-VS` bundled in the image, without any host upstream source mount.
+Its five stage predictions matched direct inference with maximum absolute difference `0.0`.
+Its invalid-SMILES, selection, ranking, and todo-preservation checks passed.
+See `runs/final-independent/adaptive/verification.json`.
+
+All 29 focused tests passed, including the two review regressions.
+The broader regression passed 484 tests with three opt-in skips and 13 warnings.
+Those root CLI opt-in tests had passed separately before the review fixes, as recorded above.
+See `runs/final-independent/focused.log` and `runs/final-independent/regression.log`.
+
+Image inspection confirmed both upstream workflows and their license texts, matching runtime source, and no copied model weights.
+Only the two open example reaction maps were present in the inspected workflow directories.
+See `runs/final-independent/source-diff.log` and `runs/final-independent/image-inspection.log`.
+CUDA and large-catalogue limitations still apply.
