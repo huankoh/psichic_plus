@@ -1,0 +1,18 @@
+PSICHIC+ ligand featurization
+
+Ported from huankoh/psichic-plus mol_featurizer at commit 3c8e5e4.
+The normalization and graph algorithms retain their original behavior.
+Native loaders use installed extensions instead of compiling at import.
+
+src/psichic_ligand/normalization/papyrus_structure_pipeline contains the
+Papyrus structure pipeline 0.0.5 subset, under the MIT license.
+Its standardizer uses the local ChEMBL subset and native tautomer picker.
+The original license is retained in that directory.
+
+src/psichic_ligand/normalization/chembl_structure_pipeline contains the
+ChEMBL structure pipeline 1.2.4 subset, under the MIT license.
+The vendored standardizer accepts the native tautomer picker.
+The original license and salts/solvents data are retained in that directory.
+
+normalization/native/tautomer_ext.cpp includes adapted RDKit
+Release_2024_03_3 code under its BSD license, retained in the source.
