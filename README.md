@@ -88,3 +88,5 @@ Vendored Papyrus 0.0.5 and ChEMBL Structure Pipeline 1.2.4 code, their MIT licen
 This public alpha is available for non-commercial research and evaluation under [LICENSE](LICENSE).
 
 For adaptive collection screening, see the optional [AdaptiveFlow adapter](psichic_plus_adaptive/README.md).
+For affinity-guided molecule generation, see the [SyntheMol adapter](psichic_plus_synthemol/README.md).
+The [shared workflow image](psichic_plus_workflows/README.md) contains PSICHIC+ and both adapters.

@@ -14,6 +14,7 @@ psichic-ligand/build/
 psichic-ligand/tests/
 psichic_plus_screening/tests/
 psichic_plus_screening/runs/
+psichic_plus_screening/pretrained_weights/
 psichic_plus_screening/**/*.log
 psichic_plus_screening/**/*.nsys-rep
 psichic_plus_screening/**/*.sqlite*

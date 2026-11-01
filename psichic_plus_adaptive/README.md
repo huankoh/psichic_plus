@@ -73,6 +73,9 @@ If a run exits with an incomplete-output error, inspect its `incomplete.json` an
 
 ## Run inside your screening image
 
+For one image containing PSICHIC+ and both workflow adapters, use the [shared workflow image](../psichic_plus_workflows/README.md).
+The standalone adapter image below extends a screening image you supply.
+
 Choose a base image you are authorized to use.
 The base must provide the existing screening modules at `/opt/min-psichic_plus`, their Python dependencies, Git, Bash, and `/usr/bin/tini`.
 The adapter Dockerfile copies no weights and downloads no AdaptiveFlow source.
@@ -116,8 +119,9 @@ docker run --rm --shm-size=4g \
 ```
 
 For CUDA, add `--gpus all` and use `--device cuda:0` with a compatible base image and driver.
-Docker and CUDA execution were unavailable in the implementation environment.
-The CPU workflow is the verified path.
+The [shared CPU image](../psichic_plus_workflows/README.md) has passed this verifier with real weights.
+See the [shared-image evidence](../psichic_plus_synthemol/VERIFICATION.md) for the executed commands and results.
+CUDA execution remains unverified.
 
 ## Run the behavior tests
 
