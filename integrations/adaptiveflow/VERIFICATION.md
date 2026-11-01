@@ -59,6 +59,20 @@ The `fork` evidence is in `runs/adaptiveflow-verify-fork/verification.json`.
 - All seven conversion and input-contract tests passed.
 - Ruff checks, formatting checks, and whitespace checks passed.
 
+## Independent verification after review fixes
+
+A fresh verifier repeated the actual-model workflow into `runs/adaptiveflow-independent` after the input fixes.
+It confirmed three successful predictions, one visible failure, one model initialization across two batches, and exact agreement with direct CPU inference.
+The actual upstream selector and primary workunit preparation passed again.
+All 15 input-contract tests and Ruff checks passed in the final verification.
+
+The converter now rejects tranche names that upstream CSV parsing turns into missing values or booleans.
+Regression cases include `NA`, `NULL`, `NaN`, `True`, and `FALSE`.
+Generated sparse names skip existing input tranche names without regard to case.
+Source tranche names that differ only by case are rejected before output creation.
+An additional real run with input collection `SPARSE0_0000000` used separate sparse archives, preserved the original archive, and produced primary predictions for both original ligand IDs.
+Its evidence is in `runs/adaptiveflow-collision-selected/verification.json`.
+
 ## Gaps
 
 `docker info --format '{{.ServerVersion}}'` failed because `/Users/huanyeekoh/.docker/run/docker.sock` did not exist.
@@ -66,4 +80,6 @@ No image build or container execution was tested.
 PyTorch reported `torch.cuda.is_available() == False`, and `nvidia-smi` was unavailable.
 CUDA execution remains unverified.
 The runtime mount command is documented without changing shared Docker files or distributing a combined image.
-Independent review and PR creation remain with the parent agent.
+Two reviewers completed the full change review.
+All three input-correctness findings were fixed and the final actual-model verification passed.
+The final evidence is in `runs/adaptiveflow-final/verification.json` and `runs/adaptiveflow-lowercase-final/verification.json`.

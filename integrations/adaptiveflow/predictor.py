@@ -1,5 +1,3 @@
-"""One target and model per AdaptiveFlow docking child."""
-
 import hashlib
 import sys
 from pathlib import Path

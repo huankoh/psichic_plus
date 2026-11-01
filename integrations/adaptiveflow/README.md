@@ -25,6 +25,8 @@ The runner checks the revision and imports the separately installed `tools/templ
 Prepare one FASTA record and a CSV with these columns.
 Keep collection numbers as strings, including their leading zeros.
 Tranches must start with an ASCII letter and contain only ASCII letters and digits.
+Tranche names must be distinct without regard to case.
+Names that upstream CSV parsing treats as missing values or booleans, such as `NA`, `NULL`, and `True`, are rejected before conversion.
 Collection IDs must contain only digits because upstream collection keys use `tranche_collection`.
 
 ```csv

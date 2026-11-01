@@ -82,6 +82,11 @@ def test_conversion_keeps_row_identity_and_sparse_original_collections(tmp_path)
         ("tranche", "AA_BB"),
         ("tranche", "01"),
         ("tranche", "../AA"),
+        ("tranche", "NA"),
+        ("tranche", "NULL"),
+        ("tranche", "NaN"),
+        ("tranche", "True"),
+        ("tranche", "FALSE"),
         ("collection_id", "../1"),
         ("collection_id", "1.0"),
     ],
@@ -101,6 +106,32 @@ def test_rejects_keys_upstream_cannot_round_trip(tmp_path, field, value):
     assert not (tmp_path / "output").exists()
 
 
+@pytest.mark.parametrize("tranche", ["SPARSE0", "sparse0"])
+def test_sparse_archive_does_not_overwrite_input_collection(tmp_path, tranche):
+    source = tmp_path / "input.csv"
+    write_csv(
+        source,
+        FIELDS[1:],
+        [
+            {
+                "molecule_id": "original",
+                "collection_id": "0000000",
+                "tranche": tranche,
+                "smiles": "CCO",
+            }
+        ],
+    )
+    destination = tmp_path / "converted"
+    records = convert_library(source, destination, 1)
+    sparse_key = (destination / "prescreen.todo").read_text().split()[0]
+    assert sparse_key.casefold() != "sparse0_0000000"
+    with tarfile.open(destination / f"collections/{tranche}/0000000.tar.gz") as archive:
+        assert (
+            json.load(archive.extractfile(f"0000000/{records[0]['ligand_id']}.json"))
+            == records[0]
+        )
+
+
 def test_rejects_impossible_budget_before_external_selector(tmp_path):
     library = tmp_path / "library"
     library.mkdir()
@@ -115,3 +146,24 @@ def test_rejects_impossible_budget_before_external_selector(tmp_path):
             tmp_path / "no-upstream", library, [], 3, "AA", tmp_path / "selection"
         )
     assert not (tmp_path / "selection").exists()
+
+
+def test_rejects_source_tranches_that_differ_only_by_case(tmp_path):
+    source = tmp_path / "input.csv"
+    write_csv(
+        source,
+        FIELDS[1:],
+        [
+            {
+                "molecule_id": name,
+                "collection_id": "0000000",
+                "tranche": name,
+                "smiles": "CCO",
+            }
+            for name in ["AA", "aa"]
+        ],
+    )
+    destination = tmp_path / "converted"
+    with pytest.raises(ValueError, match="distinct without regard to case"):
+        convert_library(source, destination, 1)
+    assert not destination.exists()

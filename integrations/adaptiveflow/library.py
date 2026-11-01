@@ -1,5 +1,3 @@
-"""Convert CSV rows into manifest-backed AFVS collections and inventories."""
-
 import csv
 import io
 import json
@@ -69,6 +67,17 @@ def convert_library(source, destination, samples_per_tranche):
     if not records:
         raise ValueError("Library has no molecules")
 
+    tranche_names = {row["tranche"] for row in records}
+    occupied_names = {name.casefold() for name in tranche_names}
+    if len(occupied_names) != len(tranche_names):
+        raise ValueError("Tranche names must be distinct without regard to case")
+    for tranche in tranche_names:
+        parsed = pd.read_csv(io.StringIO(f"Tranche\n{tranche}\n")).iloc[0, 0]
+        if not isinstance(parsed, str) or parsed != tranche:
+            raise ValueError(
+                f"Tranche {tranche!r} cannot round-trip through upstream CSV parsing"
+            )
+
     destination = Path(destination)
     destination.mkdir(parents=True)
     write_csv(destination / "manifest.csv", FIELDS, records)
@@ -109,8 +118,12 @@ def convert_library(source, destination, samples_per_tranche):
     ).to_parquet(destination / "tranches.parquet", index=False)
 
     with (destination / "prescreen.todo").open("w") as todo:
-        for index, rows in enumerate(tranches.values()):
+        index = 0
+        for rows in tranches.values():
+            while f"sparse{index}" in occupied_names:
+                index += 1
             sparse_tranche = f"SPARSE{index}"
+            index += 1
             number = "0000000"
             sampled = rows[:samples_per_tranche]
             write_archive(
