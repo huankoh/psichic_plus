@@ -1,0 +1,34 @@
+{
+  "native_commands_passed": [
+    "afvs_prepare_folders.py",
+    "afvs_prepare_workunits.py",
+    "afvs_submit_jobs.py 1 1",
+    "generated workflow/workunits/1/run.bash",
+    "create_todofile_atg-primaryscreen.py tranche_ave_score"
+  ],
+  "prescreen_completions": 4,
+  "primary_collection": "AA_0000001",
+  "full_library_completions": 16,
+  "full_summary_rows": 6,
+  "visible_failures": 4,
+  "duplicate_id_logs": 4,
+  "target_model_initializations": 1,
+  "completed_model_batches": 7,
+  "max_direct_affinity_difference": 5.9604644775390625e-06,
+  "max_replica_affinity_difference": 4.5299530029296875e-06,
+  "mixed_method_completions": 8,
+  "all_failure_first_scenario_preserves_later_summary": true,
+  "ambiguous_archive_rejected": true,
+  "mac_test_only": false,
+  "real_model_recovery_after_faults": [
+    "before-read",
+    "initialize",
+    "predict",
+    "partial"
+  ],
+  "gaps": [
+    "CUDA hardware",
+    "Slurm and AWS submission",
+    "cluster scaling"
+  ]
+}

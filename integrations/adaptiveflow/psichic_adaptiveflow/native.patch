@@ -1,0 +1,191 @@
+diff --git a/tools/afvs_prepare_folders.py b/tools/afvs_prepare_folders.py
+index d6e70a8..30a75b0 100755
+--- a/tools/afvs_prepare_folders.py
++++ b/tools/afvs_prepare_folders.py
+@@ -1,5 +1,7 @@
+ #!/usr/bin/env python3
+ 
++# Modified 2026-11-01 to validate opt-in PSICHIC+ scenarios.
++# Copyright (C) 2026 PSICHIC+ contributors
+ # Copyright (C) 2019 Christoph Gorgulla
+ # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ #
+@@ -277,6 +279,10 @@ def main():
+     config = parse_config("templates/all.ctrl")
+ 
+ 
++    if 'psichic_plus' in config['docking_scenario_methods']:
++        from psichic_adaptiveflow.adapter import validate_preparation
++        validate_preparation(config)
++
+     # Check some of the parameters we care about
+     error = check_parameters(config)
+ 
+diff --git a/tools/templates/afvs_run.py b/tools/templates/afvs_run.py
+index da82718..40bf914 100755
+--- a/tools/templates/afvs_run.py
++++ b/tools/templates/afvs_run.py
+@@ -1,5 +1,7 @@
+ #!/usr/bin/env python3
+ 
++# Modified 2026-11-01 for opt-in PSICHIC+ native scoring, identity, and lifecycle.
++# Copyright (C) 2026 PSICHIC+ contributors
+ # Copyright (C) 2019 Christoph Gorgulla
+ # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ #
+@@ -192,6 +194,9 @@ def untar(unpack_queue, collection_queue):
+ 
+ 
+ def unpack_item(item):
++    if item.get('psichic_plus'):
++        from psichic_adaptiveflow.adapter import unpack_collection
++        return unpack_collection(item)
+ 
+     ligands = {}
+ 
+@@ -287,6 +292,11 @@ def collection_process(ctx, collection_queue, docking_queue, summary_queue):
+             coords = {}
+             skip_ligand = 0
+ 
++            if ligand.get('failure'):
++                submit_ligand_for_docking(ctx, docking_queue, ligand_key, ligand['path'], ligand['collection_key'], ligand['base_collection_key'], {'psichic_input_failure': ligand['failure']}, item['temp_dir'])
++                expected_ligands += completions_per_ligand
++                continue
++
+             with open(ligand['path'], "r") as read_file:
+                 for index, line in enumerate(read_file):
+ 
+@@ -426,6 +436,8 @@ def submit_ligand_for_docking(ctx, docking_queue, ligand_name, ligand_path, coll
+         for replica_index in range(scenario['replicas']):
+ 
+             ligand_directory_directory = Path(temp_dir) / "output" / scenario_key / ligand_name / str(replica_index)
++            if scenario['program'] == 'psichic_plus':
++                ligand_directory_directory = Path(temp_dir) / "output" / scenario_key / base_collection_key / collection_key / ligand_name / str(replica_index)
+             ligand_directory_directory.mkdir(parents=True, exist_ok=True)
+ 
+             docking_item = {
+@@ -442,7 +454,8 @@ def submit_ligand_for_docking(ctx, docking_queue, ligand_name, ligand_path, coll
+                 'tools_path': ctx['tools_path'],
+                 'threads_per_docking': int(ctx['main_config']['threads_per_docking']),
+                 'temp_dir': temp_dir,
+-                'attrs': ligand_attrs,
++                'attrs': dict(ligand_attrs),
++                'replica_index': replica_index,
+                 'output_dir': str(ligand_directory_directory)
+             }
+ 
+@@ -459,6 +472,18 @@ def read_config_line(line):
+ 
+ def docking_process(ctx, docking_queue, summary_queue):
+ 
++    if 'psichic_plus' in ctx['main_config']['docking_scenario_methods']:
++        from psichic_adaptiveflow.adapter import complete_batch
++        DOCKING_PROGRAMS['psichic_plus'] = {'ligands': 'batch', 'native_batch': complete_batch}
++    scorers = {}
++    try:
++        docking_worker(ctx, docking_queue, summary_queue, scorers)
++    finally:
++        for scorer in scorers.values():
++            scorer.close()
++
++
++def docking_worker(ctx, docking_queue, summary_queue, scorers):
+     items_queue = {}
+ 
+     while True:
+@@ -469,7 +494,7 @@ def docking_process(ctx, docking_queue, summary_queue):
+             # even though we might not have everything
+             for scenario_key in items_queue:
+                 scenario = ctx['main_config']['docking_scenarios'][scenario_key]
+-                docking_process_batch(summary_queue, scenario, items_queue[scenario_key], ctx['temp_dir'])
++                docking_process_batch(summary_queue, scenario, items_queue[scenario_key], ctx['temp_dir'], scorers)
+                 items_queue[scenario_key] = []
+             continue
+ 
+@@ -478,7 +503,7 @@ def docking_process(ctx, docking_queue, summary_queue):
+             # Process what is left in our queue
+             for scenario_key in items_queue:
+                 scenario = ctx['main_config']['docking_scenarios'][scenario_key]
+-                docking_process_batch(summary_queue, scenario, items_queue[scenario_key], ctx['temp_dir'])
++                docking_process_batch(summary_queue, scenario, items_queue[scenario_key], ctx['temp_dir'], scorers)
+                 items_queue[scenario_key] = []
+             break
+ 
+@@ -490,7 +515,7 @@ def docking_process(ctx, docking_queue, summary_queue):
+         items_queue[scenario_key].append(item)
+ 
+         if len(items_queue[scenario_key]) >= scenario['batchsizes']:
+-            docking_process_batch(summary_queue, scenario, items_queue[scenario_key], ctx['temp_dir'])
++            docking_process_batch(summary_queue, scenario, items_queue[scenario_key], ctx['temp_dir'], scorers)
+             items_queue[scenario_key] = []
+ 
+ 
+@@ -520,7 +545,7 @@ def docking_process_clean_common(item):
+     shutil.rmtree(item['tmp_run_dir'])
+     item['seconds'] = time.perf_counter() - item['start_time']
+ 
+-def docking_process_batch(summary_queue, scenario, items, temp_dir):
++def docking_process_batch(summary_queue, scenario, items, temp_dir, scorers=None):
+ 
+     if(len(items) == 0):
+         return
+@@ -543,6 +568,12 @@ def docking_process_batch(summary_queue, scenario, items, temp_dir):
+             'reason': ""
+         }
+ 
++    callback = DOCKING_PROGRAMS[scenario['program']].get('native_batch')
++    if callback is not None:
++        callback(batched_item, scenario, scorers, docking_process_setup_common, docking_process_clean_common, temp_dir)
++        summary_queue.put(batched_item)
++        return
++
+     if batched_item['execution_type'] == "single":
+         for item in batched_item['items']:
+             ret = None
+@@ -762,6 +793,8 @@ def summary_process(ctx, summary_queue, upload_queue, metadata):
+ 
+                 if(single_item['status'] == "success"):
+                     summary_key = f"{single_item['ligand_key']}"
++                    if single_item['program'] == 'psichic_plus':
++                        summary_key = (single_item['collection_key'], single_item['ligand_key'])
+ 
+                     if summary_key not in summary_data[single_item['scenario_key']]:
+                         summary_data[single_item['scenario_key']][summary_key] = {
+@@ -872,7 +905,7 @@ def generate_summary_file(ctx, summary_data, upload_queue, tmp_dir):
+     for scenario_key in ctx['main_config']['docking_scenarios']:
+ 
+         if(len(summary_data[scenario_key]) == 0):
+-            break
++            continue
+ 
+         csv_ordering = ['ligand', 'collection_key', 'scenario', 'score_average', 'score_min']
+         max_scores = 0
+@@ -912,6 +945,8 @@ def generate_summary_file(ctx, summary_data, upload_queue, tmp_dir):
+ 
+             # Now we can generate a parquet file with all of the data
+             df = pd.DataFrame.from_dict(summary_data[scenario_key], "index")
++            if ctx['main_config']['docking_scenarios'][scenario_key]['program'] == 'psichic_plus':
++                df = df.reset_index(drop=True)
+ 
+             upload_tmp_dir = tempfile.mkdtemp(prefix=tmp_dir)
+ 
+@@ -4112,6 +4147,11 @@ def process(ctx):
+     # Update some of the path information
+ 
+     process_config(ctx)
++    if 'psichic_plus' in ctx['main_config']['docking_scenario_methods']:
++        from psichic_adaptiveflow.adapter import complete_batch, validate_preparation
++        DOCKING_PROGRAMS['psichic_plus'] = {'ligands': 'batch', 'native_batch': complete_batch}
++        validation_config = dict(ctx['main_config'], docking_scenario_basefolder=str(Path(ctx['temp_dir']) / 'af_input' / 'input-files'))
++        validate_preparation(validation_config)
+ 
+     ctx['workunit_id'] = workunit_id
+     ctx['subjob_id'] = subjob_id
+@@ -4204,6 +4244,7 @@ def process(ctx):
+             download_item = {
+                 'collection_key': collection_key,
+                 'collection': collection,
++                'psichic_plus': 'psichic_plus' in ctx['main_config']['docking_scenario_methods'],
+                 'ext': "tar.gz",
+             }
+ 
