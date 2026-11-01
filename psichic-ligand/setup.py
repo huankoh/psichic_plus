@@ -163,4 +163,5 @@ if __name__ == "__main__":
     setup(
         ext_modules=extensions(locate_rdkit_toolchain()),
         cmdclass={"build_ext": build_ext},
+        options={"build_ext": {"force": True}},
     )
