@@ -3,27 +3,20 @@
 from __future__ import annotations
 
 import gc
-import hashlib
 import logging
 import math
 import os
 import pickle
 import tempfile
-import threading
-from collections import OrderedDict
 from collections.abc import Mapping
-from dataclasses import dataclass
-from itertools import chain
-from typing import Any, Callable, List, Optional, Sequence, Tuple, TypeVar, Union
+from typing import Any, List, Optional, Sequence, Union
 
 import esm
 import numpy as np
 import pandas as pd
 import torch
 from rdkit import Chem
-from rdkit.Chem import AllChem, PropertyPickleOptions
-from scipy.sparse.csgraph import minimum_spanning_tree
-from torch import Tensor
+from rdkit.Chem import PropertyPickleOptions
 from torch.utils.data.dataloader import default_collate
 from torch_geometric.data import Batch, Data, Dataset
 from torch_geometric.data.data import BaseData
@@ -33,483 +26,13 @@ from torch_geometric.utils import (
     add_self_loops,
     coalesce,
     degree,
-    from_scipy_sparse_matrix,
-    is_torch_sparse_tensor,
     remove_self_loops,
-    scatter,
-    to_edge_index,
-    to_scipy_sparse_matrix,
     to_undirected,
 )
 from tqdm import tqdm
 
-from papyrus_structure_pipeline import standardizer as Papyrus_standardizer
+from psichic_ligand import LigandStore
 
-T = TypeVar("T")
-
-
-class TimeoutHandler:
-    def __init__(self, timeout_seconds: int = 10):
-        self.timeout_seconds = timeout_seconds
-        self._result: Optional[Any] = None
-        self._exception: Optional[Exception] = None
-
-    def run_with_timeout(self, func: Callable[..., T], *args, **kwargs) -> Optional[T]:
-        def worker():
-            try:
-                self._result = func(*args, **kwargs)
-            except Exception as exc:  # pragma: no cover - propagated below
-                self._exception = exc
-
-        thread = threading.Thread(target=worker)
-        thread.daemon = True
-        thread.start()
-        thread.join(timeout=self.timeout_seconds)
-
-        if thread.is_alive():
-            return None
-        if self._exception is not None:
-            raise self._exception
-        return self._result
-
-
-@dataclass
-class NormalizationResult:
-    smiles: Optional[str]
-    status: str
-    error_message: Optional[str] = None
-
-
-@dataclass
-class LigandFailureDiagnosis:
-    valid: bool
-    failure_stage: Optional[str] = None
-    failure_reason: Optional[str] = None
-
-
-class MoleculeNormalizer:
-    def __init__(self, timeout_seconds: int = 10):
-        self.timeout_handler = TimeoutHandler(timeout_seconds)
-
-    def _standardize_molecule(self, mol):
-        return Papyrus_standardizer.standardize(
-            mol,
-            filter_inorganic=False,
-            small_molecule_min_mw=100,
-            small_molecule_max_mw=2000,
-            return_type=True,
-        )
-
-    def standardize_normalize(self, smiles: str) -> NormalizationResult:
-        try:
-            mol = Chem.MolFromSmiles(smiles)
-            if mol is None:
-                return NormalizationResult(None, "INVALID_SMILES", "Could not parse SMILES")
-
-            result = self.timeout_handler.run_with_timeout(self._standardize_molecule, mol)
-            if result is None:
-                return NormalizationResult(None, "TIMEOUT", "Standardization timeout")
-
-            out_type = result[1].value
-            status_mapping = {
-                1: ("SUCCESS", None),
-                2: ("NON_SMALL_MOLECULE", "Molecular weight outside allowed range"),
-                3: ("INORGANIC_MOLECULE", "Molecule contains non-organic elements"),
-                4: ("MIXTURE", "Multiple fragments detected"),
-                5: ("STANDARDIZATION_ERROR", "General standardization error"),
-            }
-            if out_type != 1:
-                status, message = status_mapping.get(
-                    out_type,
-                    ("UNKNOWN_ERROR", f"Unknown standardization result type: {out_type}"),
-                )
-                return NormalizationResult(None, status, message)
-
-            mol = result[0]
-            mol = Chem.RemoveHs(mol, sanitize=True)
-            mol = AllChem.RemoveAllHs(mol)
-            normalized_smiles = Chem.MolToSmiles(mol, isomericSmiles=False, canonical=True)
-            return NormalizationResult(normalized_smiles, "SUCCESS", None)
-        except Exception as exc:
-            return NormalizationResult(None, "GENERAL_ERROR", str(exc))
-
-
-def diagnose_ligand_failure(smiles: Any, timeout_seconds: int = 10) -> LigandFailureDiagnosis:
-    if smiles is None or pd.isna(smiles):
-        return LigandFailureDiagnosis(False, "ligand_input", "EMPTY_LIGAND: Ligand value is empty")
-
-    smiles_text = str(smiles).strip()
-    if not smiles_text:
-        return LigandFailureDiagnosis(False, "ligand_input", "EMPTY_LIGAND: Ligand value is empty")
-
-    normalizer = MoleculeNormalizer(timeout_seconds=timeout_seconds)
-    result = normalizer.standardize_normalize(smiles_text)
-    if result.smiles is None:
-        message = result.error_message or "Ligand could not be standardized"
-        return LigandFailureDiagnosis(
-            False,
-            "ligand_standardization",
-            f"{result.status}: {message}",
-        )
-
-    try:
-        graph = smiles_to_graph(result.smiles)
-    except Exception as exc:
-        return LigandFailureDiagnosis(
-            False,
-            "ligand_graph",
-            f"GRAPH_CONSTRUCTION_ERROR: {exc}",
-        )
-
-    if graph is None:
-        return LigandFailureDiagnosis(
-            False,
-            "ligand_graph",
-            "GRAPH_CONSTRUCTION_ERROR: Molecule graph is None",
-        )
-    return LigandFailureDiagnosis(True)
-
-
-x_map = OrderedDict(
-    [
-        (
-            "chirality",
-            [
-                "CHI_UNSPECIFIED",
-                "CHI_TETRAHEDRAL_CW",
-                "CHI_TETRAHEDRAL_CCW",
-                "CHI_OTHER",
-                "CHI_TETRAHEDRAL",
-                "CHI_ALLENE",
-                "CHI_SQUAREPLANAR",
-                "CHI_TRIGONALBIPYRAMIDAL",
-                "CHI_OCTAHEDRAL",
-            ],
-        ),
-        ("degree", list(range(0, 11))),
-        ("formal_charge", list(range(-5, 10))),
-        ("num_hs", list(range(0, 9))),
-        ("num_radical_electrons", list(range(0, 5))),
-        (
-            "hybridization",
-            [
-                "UNSPECIFIED",
-                "S",
-                "SP",
-                "SP2",
-                "SP3",
-                "SP3D",
-                "SP3D2",
-                "OTHER",
-            ],
-        ),
-        ("is_aromatic", [False, True]),
-        ("is_in_ring", [False, True]),
-    ]
-)
-
-e_map = OrderedDict(
-    [
-        (
-            "bond_type",
-            [
-                "UNSPECIFIED",
-                "SINGLE",
-                "DOUBLE",
-                "TRIPLE",
-                "QUADRUPLE",
-                "QUINTUPLE",
-                "HEXTUPLE",
-                "ONEANDAHALF",
-                "TWOANDAHALF",
-                "THREEANDAHALF",
-                "FOURANDAHALF",
-                "FIVEANDAHALF",
-                "AROMATIC",
-                "IONIC",
-                "HYDROGEN",
-                "THREECENTER",
-                "DATIVEONE",
-                "DATIVE",
-                "DATIVEL",
-                "DATIVER",
-                "OTHER",
-                "ZERO",
-            ],
-        ),
-        ("stereo", ["STEREONONE", "STEREOANY", "STEREOZ", "STEREOE", "STEREOCIS", "STEREOTRANS"]),
-        ("is_conjugated", [False, True]),
-    ]
-)
-
-metals = [3, 4, 11, 12, 13] + list(range(19, 32)) + list(range(37, 51)) + list(range(55, 84)) + list(range(87, 104))
-atom_classes = [
-    (5, "B"),
-    (6, "C"),
-    (7, "N"),
-    (8, "O"),
-    (15, "P"),
-    (16, "S"),
-    (34, "Se"),
-    ([9, 17, 35, 53], "halogen"),
-    (metals, "metal"),
-]
-ATOM_CODES = {}
-for code, (atom, _) in enumerate(atom_classes):
-    if isinstance(atom, list):
-        for atomic_num in atom:
-            ATOM_CODES[atomic_num] = code
-    else:
-        ATOM_CODES[atom] = code
-
-x_map_length = {key: len(value) for key, value in x_map.items()}
-e_map_length = {key: len(value) for key, value in e_map.items()}
-
-
-def map_atom_code(atomic_num):
-    try:
-        return ATOM_CODES[atomic_num] + 1
-    except KeyError:
-        return 0
-
-
-def one_hot_encode_features(features, feature_lengths):
-    one_hot_encoded = []
-    for i in range(features.shape[1]):
-        feature_column = features[:, i]
-        num_classes = feature_lengths[list(feature_lengths.keys())[i]]
-        one_hot_encoded.append(torch.eye(num_classes)[feature_column])
-    return torch.concat(one_hot_encoded, dim=1)
-
-
-def from_rdmol(mol: Any, one_hot=True):
-    assert isinstance(mol, Chem.Mol)
-
-    xs: List[List[int]] = []
-    atom_ids: List[int] = []
-    atomic_nums: List[int] = []
-
-    for atom in mol.GetAtoms():
-        atomic_num = atom.GetAtomicNum()
-        atom_ids.append(map_atom_code(atomic_num))
-        atomic_nums.append(atomic_num)
-        xs.append(
-            [
-                x_map["chirality"].index(str(atom.GetChiralTag())) if str(atom.GetChiralTag()) in x_map["chirality"] else 0,
-                x_map["degree"].index(atom.GetTotalDegree()) if atom.GetTotalDegree() in x_map["degree"] else len(x_map["degree"]) - 1,
-                x_map["formal_charge"].index(atom.GetFormalCharge())
-                if atom.GetFormalCharge() in x_map["formal_charge"]
-                else len(x_map["formal_charge"]) - 1,
-                x_map["num_hs"].index(atom.GetTotalNumHs()) if atom.GetTotalNumHs() in x_map["num_hs"] else len(x_map["num_hs"]) - 1,
-                x_map["num_radical_electrons"].index(atom.GetNumRadicalElectrons())
-                if atom.GetNumRadicalElectrons() in x_map["num_radical_electrons"]
-                else len(x_map["num_radical_electrons"]) - 1,
-                x_map["hybridization"].index(str(atom.GetHybridization())) if str(atom.GetHybridization()) in x_map["hybridization"] else 0,
-                x_map["is_aromatic"].index(atom.GetIsAromatic()),
-                x_map["is_in_ring"].index(atom.IsInRing()),
-            ]
-        )
-
-    atom_ids_tensor = torch.tensor(atom_ids, dtype=torch.long).view(-1, 1)
-    atomic_nums_tensor = torch.tensor(atomic_nums, dtype=torch.long).view(-1, 1)
-    x = torch.tensor(xs, dtype=torch.long).view(-1, 8)
-
-    edge_indices, edge_attrs = [], []
-    for bond in mol.GetBonds():
-        i = bond.GetBeginAtomIdx()
-        j = bond.GetEndAtomIdx()
-        edge_attr = [
-            e_map["bond_type"].index(str(bond.GetBondType())),
-            e_map["stereo"].index(str(bond.GetStereo())),
-            e_map["is_conjugated"].index(bond.GetIsConjugated()),
-        ]
-        edge_indices += [[i, j], [j, i]]
-        edge_attrs += [edge_attr, edge_attr]
-
-    edge_index = torch.tensor(edge_indices).t().to(torch.long).view(2, -1)
-    edge_attr = torch.tensor(edge_attrs, dtype=torch.long).view(-1, 3)
-    if edge_index.numel() > 0:
-        perm = (edge_index[0] * x.size(0) + edge_index[1]).argsort()
-        edge_index, edge_attr = edge_index[:, perm], edge_attr[perm]
-
-    if one_hot:
-        x = one_hot_encode_features(x, x_map_length)
-        edge_attr = one_hot_encode_features(edge_attr, e_map_length)
-    else:
-        x = x.float()
-        edge_attr = edge_attr.float()
-    return atom_ids_tensor, atomic_nums_tensor, x, edge_index, edge_attr
-
-
-def tree_decomposition(mol: Any, return_vocab: bool = False) -> Union[Tuple[Tensor, Tensor, int], Tuple[Tensor, Tensor, int, Tensor]]:
-    cliques = [list(x) for x in Chem.GetSymmSSSR(mol)]
-    xs = [0] * len(cliques)
-    for bond in mol.GetBonds():
-        if not bond.IsInRing():
-            cliques.append([bond.GetBeginAtomIdx(), bond.GetEndAtomIdx()])
-            xs.append(1)
-
-    atom2clique = [[] for _ in range(mol.GetNumAtoms())]
-    for c, clique in enumerate(cliques):
-        for atom in clique:
-            atom2clique[atom].append(c)
-
-    for c1 in range(len(cliques)):
-        for atom in cliques[c1]:
-            for c2 in atom2clique[atom]:
-                if c1 >= c2 or len(cliques[c1]) <= 2 or len(cliques[c2]) <= 2:
-                    continue
-                if len(set(cliques[c1]) & set(cliques[c2])) > 2:
-                    cliques[c1] = set(cliques[c1]) | set(cliques[c2])
-                    xs[c1] = 2
-                    cliques[c2] = []
-                    xs[c2] = -1
-    cliques = [c for c in cliques if len(c) > 0]
-    xs = [x for x in xs if x >= 0]
-
-    atom2clique = [[] for _ in range(mol.GetNumAtoms())]
-    for c, clique in enumerate(cliques):
-        for atom in clique:
-            atom2clique[atom].append(c)
-
-    edges = {}
-    for atom in range(mol.GetNumAtoms()):
-        cs = atom2clique[atom]
-        if len(cs) <= 1:
-            continue
-        bonds = [c for c in cs if len(cliques[c]) == 2]
-        rings = [c for c in cs if len(cliques[c]) > 4]
-        if len(bonds) > 2 or (len(bonds) == 2 and len(cs) > 2):
-            cliques.append([atom])
-            xs.append(3)
-            c2 = len(cliques) - 1
-            for c1 in cs:
-                edges[(c1, c2)] = 1
-        elif len(rings) > 2:
-            cliques.append([atom])
-            xs.append(3)
-            c2 = len(cliques) - 1
-            for c1 in cs:
-                edges[(c1, c2)] = 99
-        else:
-            for i in range(len(cs)):
-                for j in range(i + 1, len(cs)):
-                    c1, c2 = cs[i], cs[j]
-                    count = len(set(cliques[c1]) & set(cliques[c2]))
-                    edges[(c1, c2)] = min(count, edges.get((c1, c2), 99))
-
-    atom2clique = [[] for _ in range(mol.GetNumAtoms())]
-    for c, clique in enumerate(cliques):
-        for atom in clique:
-            atom2clique[atom].append(c)
-
-    if len(edges) > 0:
-        edge_index_t, weight = zip(*edges.items())
-        edge_index = torch.tensor(edge_index_t).t()
-        inv_weight = 100 - torch.tensor(weight)
-        graph = to_scipy_sparse_matrix(edge_index, inv_weight, len(cliques))
-        junction_tree = minimum_spanning_tree(graph)
-        edge_index, _ = from_scipy_sparse_matrix(junction_tree)
-        edge_index = to_undirected(edge_index, num_nodes=len(cliques))
-    else:
-        edge_index = torch.empty((2, 0), dtype=torch.long)
-
-    rows = [[i] * len(atom2clique[i]) for i in range(mol.GetNumAtoms())]
-    row = torch.tensor(list(chain.from_iterable(rows)))
-    col = torch.tensor(list(chain.from_iterable(atom2clique)))
-    atom2clique_tensor = torch.stack([row, col], dim=0).to(torch.long)
-
-    if return_vocab:
-        return edge_index, atom2clique_tensor, len(cliques), torch.tensor(xs, dtype=torch.long)
-    return edge_index, atom2clique_tensor, len(cliques)
-
-
-def add_rw_pe(edge_index, num_nodes, edge_weight=None, walk_length=20, device="cpu"):
-    num_edges = edge_index.size(1)
-    edge_index = edge_index.to(device)
-    row, col = edge_index
-    if edge_weight is None:
-        value = torch.ones(num_edges, device=row.device)
-    else:
-        value = edge_weight
-
-    value = torch.ones(num_edges, device=device)
-    value = scatter(value, row, dim_size=num_nodes, reduce="sum").clamp(min=1)[row]
-    value = 1.0 / value
-
-    adj = torch.zeros((num_nodes, num_nodes), device=device)
-    adj[row, col] = value
-    loop_index = torch.arange(num_nodes, device=device)
-
-    def get_pe(out: Tensor) -> Tensor:
-        if is_torch_sparse_tensor(out):
-            return get_self_loop_attr(*to_edge_index(out), num_nodes=num_nodes)
-        return out[loop_index, loop_index]
-
-    out = adj
-    pe_list = [get_pe(out)]
-    for _ in range(walk_length - 1):
-        out = out @ adj
-        pe_list.append(get_pe(out))
-    return torch.stack(pe_list, dim=-1)
-
-
-def get_self_loop_attr(edge_index, edge_attr, num_nodes):
-    loop_mask = edge_index[0] == edge_index[1]
-    loop_index = edge_index[0][loop_mask]
-    loop_attr = edge_attr[loop_mask] if edge_attr is not None else torch.ones_like(loop_index, dtype=torch.float)
-    full_loop_attr = loop_attr.new_zeros((num_nodes,) + loop_attr.size()[1:])
-    full_loop_attr[loop_index] = loop_attr
-    return full_loop_attr
-
-
-def smiles_to_graph(smiles, one_hot=True):
-    mol = Chem.MolFromSmiles(smiles)
-    if mol is None:
-        return None
-
-    atom_ids, atomic_nums, atom_feat, edge_index, edge_attr = from_rdmol(mol, one_hot)
-    tree_edge_index, atom2clique_index, num_cliques, x_clique = tree_decomposition(mol, return_vocab=True)
-    if atom2clique_index.nelement() == 0:
-        num_cliques = len(mol.GetAtoms())
-        x_clique = torch.tensor([3] * num_cliques)
-        atom2clique_index = torch.stack([torch.arange(num_cliques), torch.arange(num_cliques)])
-
-    graph_dict = {
-        "smiles": smiles,
-        "atom_idx": atom_ids,
-        "atom_types": atomic_nums,
-        "atom_feature": atom_feat,
-        "atom_edge_index": edge_index,
-        "atom_edge_attr": edge_attr,
-        "atom_num_nodes": atom_ids.shape[0],
-        "tree_edge_index": tree_edge_index.long(),
-        "atom2clique_index": atom2clique_index.long(),
-        "x_clique": x_clique.long().view(-1, 1),
-        "clique_num_nodes": num_cliques,
-    }
-    if num_cliques == 1:
-        graph_dict["clique_pe"] = torch.zeros(1, 20).float()
-    else:
-        graph_dict["clique_pe"] = add_rw_pe(graph_dict["tree_edge_index"], num_cliques, edge_weight=None, walk_length=20, device="cpu")
-    return graph_dict
-
-
-def safe_smiles_filename(smiles):
-    return hashlib.sha256(smiles.encode()).hexdigest()[:32]
-
-
-def process_molecule_file(smiles, ligand_path):
-    mol_filename = safe_smiles_filename(smiles)
-    mol_dict_path = os.path.join(ligand_path, f"{mol_filename}.pt")
-    if not os.path.exists(mol_dict_path):
-        mol_graph = smiles_to_graph(smiles)
-        if mol_graph is None:
-            raise Exception("Molecule is None")
-        torch.save(mol_graph, mol_dict_path)
-    else:
-        mol_graph = torch.load(mol_dict_path, weights_only=False)
-    return mol_graph
 
 
 class Collater:
@@ -790,8 +313,8 @@ class ProteinMoleculeDataset(Dataset):
     def __init__(
         self,
         sequence_data,
-        molecule_dict=None,
-        molecule_folder="",
+        *,
+        molecule_folder=None,
         protein_dict=None,
         protein_folder="",
         result_path="",
@@ -799,13 +322,9 @@ class ProteinMoleculeDataset(Dataset):
         source_data_column=None,
         device="cpu",
         molecule_error_log="molecule_error_log.txt",
-        standardize=True,
         timeout=10,
-        cache_molecules=True,
     ):
         super().__init__()
-        if molecule_dict is None:
-            molecule_dict = {}
         if protein_dict is None:
             protein_dict = {}
         if not isinstance(sequence_data, pd.core.frame.DataFrame):
@@ -837,8 +356,7 @@ class ProteinMoleculeDataset(Dataset):
         self.ids = ids
         row_positions = list(range(len(sequence_data)))
         self.pairs = list(zip(ligands, proteins, reg_labels, cls_labels, source_data, ids, row_positions))
-        self.mol_dict = molecule_dict
-        self.mol_folder = molecule_folder
+        self.ligands = LigandStore(molecule_folder, error_log=molecule_error_log, timeout_seconds=timeout)
         self.prot_dict = protein_dict
         self.prot_folder = protein_folder
         self.result_path = result_path
@@ -846,14 +364,6 @@ class ProteinMoleculeDataset(Dataset):
         self.device = device
         self.molecule_error_log = molecule_error_log
         self.timeout = timeout
-        self.cache_molecules = cache_molecules
-        if not standardize:
-            raise ValueError(
-                "PSICHIC+ requires Papyrus ligand standardization; "
-                "RDKit-only normalization is not supported."
-            )
-        self.standardize = standardize
-        self.error_molecule = set()
         self.setup_logging()
 
     def setup_logging(self):
@@ -862,47 +372,7 @@ class ProteinMoleculeDataset(Dataset):
         os.makedirs(os.path.dirname(log_file_path), exist_ok=True)
         logging.basicConfig(filename=log_file_path, filemode="a", format="%(asctime)s - %(levelname)s - %(message)s", level=logging.ERROR)
 
-    def safe_smiles_filename(self, smiles):
-        return hashlib.sha256(smiles.encode()).hexdigest()[:32]
 
-    def mol_graph(self, mol_key):
-        if mol_key in self.mol_dict:
-            return self.mol_dict[mol_key]
-
-        mol_filename = self.safe_smiles_filename(mol_key)
-        mol_dict_path = os.path.join(self.mol_folder, f"{mol_filename}.pt")
-        if self.cache_molecules and os.path.exists(mol_dict_path):
-            mol_graph = torch.load(mol_dict_path, weights_only=False)
-            if mol_graph is None:
-                raise Exception("Molecule is None")
-            return mol_graph
-
-        if mol_key in self.error_molecule:
-            raise Exception("Molecule is None as previously failed")
-
-        normalizer = MoleculeNormalizer(timeout_seconds=self.timeout)
-        result = normalizer.standardize_normalize(mol_key)
-        norm_smi = result.smiles
-        if norm_smi is None:
-            self.error_molecule.add(mol_key)
-            with open(self.molecule_error_log, "a") as handle:
-                handle.write(
-                    f"||||| {mol_key} ||||| with status (failed to normalize because [{result.status}]); "
-                    f"and error message - {result.error_message}\n"
-                )
-            raise Exception("Molecule SMILES is None")
-
-        mol_graph = smiles_to_graph(norm_smi)
-        if mol_graph is None:
-            self.error_molecule.add(mol_key)
-            with open(self.molecule_error_log, "a") as handle:
-                handle.write(f"||||| {mol_key} ||||| with status (successful normalization but fail at graph construction); and error message - None\n")
-            raise Exception("Molecule is None")
-
-        if self.cache_molecules:
-            os.makedirs(self.mol_folder, exist_ok=True)
-            torch.save(mol_graph, mol_dict_path)
-        return mol_graph
 
     def prot_graph(self, prot_key):
         if prot_key in self.prot_dict:
@@ -928,7 +398,7 @@ class ProteinMoleculeDataset(Dataset):
             mcls_y = self.mcls_labels[idx].view(1, -1)
             reg_y = torch.tensor(reg_y if not pd.isna(reg_y) else float("nan")).float()
             cls_y = torch.tensor(cls_y if not pd.isna(cls_y) else float("nan")).float()
-            mol = self.mol_graph(str(mol_key))
+            mol = self.ligands.get(str(mol_key))
             prot = self.prot_graph(str(prot_key))
             pl_pair = self.create_multigraph_data(mol, prot, reg_y, cls_y, mcls_y, str(mol_key), str(prot_key), str(source_y))
             pl_pair.id = id_val
@@ -978,19 +448,14 @@ def unbatch_nodes(data_tensor, index_tensor):
 
 
 def minmax_norm(arr):
-    return (arr - arr.min()) / (arr.max() - arr.min())
+    span = arr.max() - arr.min()
+    return np.zeros_like(arr) if span == 0 else (arr - arr.min()) / span
 
 
 def percentile_rank(arr):
     return np.argsort(np.argsort(arr)) / (len(arr) - 1)
 
 
-def load_ligand_from_path(ligand_path, ligand_key):
-    ligand_filename = safe_smiles_filename(ligand_key)
-    ligand_file = os.path.join(ligand_path, f"{ligand_filename}.pt")
-    if not os.path.exists(ligand_file):
-        raise FileNotFoundError(f"Ligand file not found: {ligand_file}")
-    return torch.load(ligand_file, weights_only=False)
 
 
 def store_ligand_score(ligand_smiles, atom_types, atom_scores, ligand_path):
@@ -1078,7 +543,7 @@ def build_interpret_result_payload(
     return payload
 
 
-def save_interpret_result_payload(payload, ligand_path, result_path, save_cluster=False):
+def save_interpret_result_payload(payload, ligands: LigandStore, result_path, save_cluster=False):
     os.makedirs(result_path, exist_ok=True)
     saved_pairs = 0
     cluster_scores = payload.get("cluster_scores") if save_cluster else None
@@ -1105,7 +570,7 @@ def save_interpret_result_payload(payload, ligand_path, result_path, save_cluste
                 protein_interpret["Layer2_Cluster" + str(ci)] = cluster_scores[2][idx][:, ci].flatten().numpy()
         _write_dataframe_csv_atomic(protein_interpret, os.path.join(pair_path, "protein.csv"))
 
-        ligand_data = load_ligand_from_path(ligand_path, key[1])
+        ligand_data = ligands.get(key[1])
         successful_ligand = store_ligand_score(
             ligand_data["smiles"],
             ligand_data["atom_types"],
@@ -1128,7 +593,7 @@ def store_result(
     ids,
     interaction_keys,
     protein_dict,
-    ligand_path,
+    ligands: LigandStore,
     reg_pred=None,
     reg_alpha=None,
     reg_beta=None,
@@ -1195,7 +660,7 @@ def store_result(
                         protein_interpret["Layer2_Cluster" + str(ci)] = unbatched_cluster_s2[idx][:, ci].cpu().flatten().numpy()
                 _write_dataframe_csv_atomic(protein_interpret, os.path.join(pair_path, "protein.csv"))
 
-                ligand_data = load_ligand_from_path(ligand_path, key[1])
+                ligand_data = ligands.get(key[1])
                 successful_ligand = store_ligand_score(
                     ligand_data["smiles"],
                     ligand_data["atom_types"],

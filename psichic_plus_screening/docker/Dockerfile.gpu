@@ -14,7 +14,8 @@ ENV DEBIAN_FRONTEND=noninteractive \
     NVIDIA_VISIBLE_DEVICES=all \
     NVIDIA_DRIVER_CAPABILITIES=compute,utility \
     PSICHIC_PLUS_RUNTIME_STACK="${VERSION}" \
-    PSICHIC_PLUS_DEFAULT_PRESET=fast_screening
+    PSICHIC_PLUS_DEFAULT_PRESET=fast_screening \
+    LD_LIBRARY_PATH=/opt/conda/envs/${ENV_NAME}/lib:${LD_LIBRARY_PATH}
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
@@ -36,8 +37,8 @@ RUN curl -fsSL \
 
 WORKDIR /opt/min-psichic_plus
 
-COPY docker/environment-gpu-a40.yml ./environment-gpu-a40.yml
-RUN /opt/conda/bin/mamba env create -f environment-gpu-a40.yml \
+COPY environment_gpu.yml ./environment_gpu.yml
+RUN /opt/conda/bin/mamba env create -f environment_gpu.yml \
     && /opt/conda/bin/mamba clean -afy
 
 RUN /opt/conda/bin/conda run -n ${ENV_NAME} python - <<'PY'
@@ -51,26 +52,28 @@ assert torch_geometric.__version__ == "2.7.0", torch_geometric.__version__
 assert torch_scatter.__version__ == "2.1.2+pt26cu124", torch_scatter.__version__
 PY
 
-COPY . .
+RUN --mount=type=bind,source=psichic-ligand,target=/tmp/psichic-ligand,rw \
+    /opt/conda/bin/conda run -n ${ENV_NAME} pip install --no-build-isolation --no-deps /tmp/psichic-ligand \
+    && /opt/conda/bin/conda run -n ${ENV_NAME} python -m psichic_ligand verify
+
+COPY psichic_plus_screening/ .
 
 RUN /opt/conda/bin/conda run -n ${ENV_NAME} python -m py_compile \
         psichic_model.py \
         featurizers.py \
         inference.py \
-        multi_gpu_inference.py \
-        papyrus_structure_pipeline/__init__.py \
-        papyrus_structure_pipeline/standardizer.py
+        multi_gpu_inference.py
 
 ARG BUILD_DATE=unknown
 ARG VCS_REF=unknown
 LABEL org.opencontainers.image.title="min-psichic_plus" \
       org.opencontainers.image.description="Standalone PSICHIC+ CUDA 12.4 screening runtime" \
-      org.opencontainers.image.source="https://github.com/huankoh/min-psichic_plus" \
+      org.opencontainers.image.source="https://github.com/huankoh/psichic_plus" \
       org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.revision="${VCS_REF}" \
       org.opencontainers.image.created="${BUILD_DATE}" \
       org.opencontainers.image.vendor="PSICHIC+" \
-      org.opencontainers.image.licenses="Private; bundled Papyrus standardizer MIT acknowledgement in README.md"
+      org.opencontainers.image.licenses="psichic_plus Non-Commercial Research License; Papyrus and ChEMBL MIT notices in psichic-ligand NOTICE"
 
 ENTRYPOINT ["/usr/bin/tini", "--"]
 CMD ["python", "inference.py", "--help"]

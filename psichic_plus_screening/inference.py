@@ -20,12 +20,12 @@ from pathlib import Path
 
 import pandas as pd
 import torch
+from psichic_ligand import FEATURIZATION_VERSION, LigandFailure, LigandStore, featurize_ligand
 
 from featurizers import (
     DataLoader,
     ProteinMoleculeDataset,
     build_interpret_result_payload,
-    diagnose_ligand_failure,
     protein_init_with_keys,
     save_interpret_result_payload,
     store_result,
@@ -489,7 +489,7 @@ def compute_ligand_clique_counts(
     for ligand_value in df["Ligand"].astype(str).tolist():
         if ligand_value not in ligand_counts:
             try:
-                ligand_counts[ligand_value] = ligand_clique_count(dataset.mol_graph(ligand_value))
+                ligand_counts[ligand_value] = ligand_clique_count(dataset.ligands.get(ligand_value))
             except Exception:
                 ligand_counts[ligand_value] = 0
                 failures += 1
@@ -512,7 +512,7 @@ def compute_size_shape_records(
 
         if ligand_value not in ligand_shapes:
             try:
-                ligand_graph = dataset.mol_graph(ligand_value)
+                ligand_graph = dataset.ligands.get(ligand_value)
                 ligand_shapes[ligand_value] = (
                     ligand_atom_count(ligand_graph),
                     ligand_clique_count(ligand_graph),
@@ -737,14 +737,12 @@ def build_loader(
     start = time.perf_counter()
     dataset = ProteinMoleculeDataset(
         df,
-        molecule_dict={},
-        molecule_folder=str(ligand_path),
+        molecule_folder=ligand_path if ligand_disk_cache else None,
         protein_dict=protein_dict,
         protein_folder=str(protein_folder) if protein_folder is not None else None,
         result_path=str(output_folder),
         dataset_tag="inference",
         device=device,
-        cache_molecules=ligand_disk_cache,
     )
     if batching_strategy not in BATCHING_STRATEGIES:
         raise ValueError(f"Unknown batching strategy: {batching_strategy}")
@@ -865,6 +863,15 @@ def _failure_reason_counts(df: pd.DataFrame) -> dict[str, int]:
     return {str(reason): int(count) for reason, count in counts.items()}
 
 
+def _diagnose_ligand(ligand_value: object) -> tuple[str, str]:
+    if ligand_value is None or pd.isna(ligand_value) or not str(ligand_value).strip():
+        return "ligand_input", "EMPTY_LIGAND: Ligand value is empty"
+    result = featurize_ligand(str(ligand_value).strip())
+    if isinstance(result, LigandFailure):
+        return result.stage, result.reason
+    return "prediction", "PREDICTION_MISSING: Ligand featurization succeeded but no prediction was emitted"
+
+
 def _diagnose_unpredicted_rows(df: pd.DataFrame, missing_mask: pd.Series) -> dict[object, tuple[str, str]]:
     diagnoses: dict[object, tuple[str, str]] = {}
     diagnosis_cache: dict[str, tuple[str, str]] = {}
@@ -874,17 +881,7 @@ def _diagnose_unpredicted_rows(df: pd.DataFrame, missing_mask: pd.Series) -> dic
         else:
             cache_key = str(ligand_value)
         if cache_key not in diagnosis_cache:
-            diagnosis = diagnose_ligand_failure(ligand_value)
-            if diagnosis.valid:
-                diagnosis_cache[cache_key] = (
-                    "prediction",
-                    "PREDICTION_MISSING: Ligand featurization succeeded but no prediction was emitted",
-                )
-            else:
-                diagnosis_cache[cache_key] = (
-                    diagnosis.failure_stage or "ligand_featurization",
-                    diagnosis.failure_reason or "LIGAND_FEATURIZATION_FAILED",
-                )
+            diagnosis_cache[cache_key] = _diagnose_ligand(ligand_value)
         diagnoses[row_position] = diagnosis_cache[cache_key]
     return diagnoses
 
@@ -1002,12 +999,12 @@ class AsyncInterpretWriter:
 
     def __init__(
         self,
-        ligand_path: Path,
+        ligands: LigandStore,
         result_path: Path,
         max_queue_size: int = 2,
         save_cluster: bool = False,
     ) -> None:
-        self.ligand_path = str(ligand_path)
+        self.ligands = ligands
         self.result_path = str(result_path)
         self.save_cluster = save_cluster
         self.queue: queue.Queue = queue.Queue(maxsize=max_queue_size)
@@ -1061,7 +1058,7 @@ class AsyncInterpretWriter:
                 start = time.perf_counter()
                 pair_count = save_interpret_result_payload(
                     item,
-                    ligand_path=self.ligand_path,
+                    ligands=self.ligands,
                     result_path=self.result_path,
                     save_cluster=self.save_cluster,
                 )
@@ -1101,7 +1098,7 @@ class AsyncInterpretWriter:
             }
 
 
-def _interpret_process_worker(queue_, result_queue, ligand_path: str, result_path: str, save_cluster: bool) -> None:
+def _interpret_process_worker(queue_, result_queue, ligands: LigandStore, result_path: str, save_cluster: bool) -> None:
     active_s = 0.0
     payloads = 0
     pairs = 0
@@ -1121,7 +1118,7 @@ def _interpret_process_worker(queue_, result_queue, ligand_path: str, result_pat
             start = time.perf_counter()
             pair_count = save_interpret_result_payload(
                 item,
-                ligand_path=ligand_path,
+                ligands=ligands,
                 result_path=result_path,
                 save_cluster=save_cluster,
             )
@@ -1145,7 +1142,7 @@ def _interpret_process_worker(queue_, result_queue, ligand_path: str, result_pat
 class ProcessInterpretWriter:
     def __init__(
         self,
-        ligand_path: Path,
+        ligands: LigandStore,
         result_path: Path,
         max_queue_size: int = 2,
         save_cluster: bool = False,
@@ -1163,7 +1160,7 @@ class ProcessInterpretWriter:
         }
         self.process = self.ctx.Process(
             target=_interpret_process_worker,
-            args=(self.queue, self.result_queue, str(ligand_path), str(result_path), save_cluster),
+            args=(self.queue, self.result_queue, ligands, str(result_path), save_cluster),
             name="psichic-interpret-writer-process",
         )
         self.process.start()
@@ -1335,7 +1332,7 @@ def run_screening(
     model: PSICHICPlusModel,
     loader: DataLoader,
     protein_dict: dict,
-    ligand_path: Path,
+    ligands: LigandStore,
     output_folder: Path,
     device: torch.device,
     save_interpret: bool,
@@ -1385,7 +1382,7 @@ def run_screening(
     interpret_writer = None
     if save_interpret:
         writer_class = ProcessInterpretWriter if interpret_writer_backend == "process" else AsyncInterpretWriter
-        interpret_writer = writer_class(ligand_path, interpret_dir, max_queue_size=2)
+        interpret_writer = writer_class(ligands, interpret_dir, max_queue_size=2)
     start = time.perf_counter()
     pending_error: BaseException | None = None
     try:
@@ -1449,7 +1446,7 @@ def run_screening(
                         batch_ids,
                         (),
                         protein_dict,
-                        str(ligand_path),
+                        ligands,
                         reg_pred=reg_pred_np,
                         reg_alpha=reg_alpha_np,
                         reg_beta=reg_beta_np,
@@ -1791,7 +1788,7 @@ def main() -> None:
             model,
             loader,
             protein_dict,
-            ligand_path,
+            loader.dataset.ligands,
             output_folder,
             device,
             args.save_interpret,
@@ -1844,6 +1841,7 @@ def main() -> None:
 
     metrics = {
         "runtime_variant": "production",
+        "ligand_featurization_version": FEATURIZATION_VERSION,
         "status": validation["status"],
         "host": socket.gethostname(),
         "gpu_name": torch.cuda.get_device_name(device) if device.type == "cuda" and torch.cuda.is_available() else None,

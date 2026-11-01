@@ -1,28 +1,31 @@
 name: psichic_fp
 channels:
-  - pytorch  # Highest priority for pytorch and related packages
   - conda-forge
-  - defaults
-  - pyg
 dependencies:
-  - python=3.8
-  - pytorch
-  - torchvision
-  - torchaudio
-  - cpuonly
-  - pyg::pyg
+  - python=3.12
+  - numpy=1.26.4
+  - pandas=2.2.2
+  - scipy=1.13.1
+  - rdkit=2024.03.3
+  - libboost-devel=1.84.0
+  - cxx-compiler=1.11.0
+  - setuptools=80.9.0
+  - pybind11=3.1.0
+  - biopython
   - pip
   - pip:
-    - rdkit
-    - scipy
-    - biopython
-    - pandas
-    - biopandas
-    - timeout_decorator
-    - py3Dmol
-    - umap-learn
-    - plotly
-    - mplcursors
-    - lifelines
-    - reprint
-    - fair-esm
+      - --extra-index-url https://download.pytorch.org/whl/cpu
+      - --find-links https://data.pyg.org/whl/torch-2.6.0+cpu.html
+      - torch==2.6.0+cpu
+      - torch-scatter==2.1.2+pt26cpu
+      - torch-sparse==0.6.18+pt26cpu
+      - torch-geometric==2.7.0
+      - fair-esm==2.0.0
+      - biopandas
+      - timeout_decorator
+      - py3Dmol
+      - umap-learn
+      - plotly
+      - mplcursors
+      - lifelines
+      - reprint

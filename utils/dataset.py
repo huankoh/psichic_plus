@@ -11,16 +11,15 @@ from copy import deepcopy
 import numpy as np
 import os
 from utils.protein_init import *
-from mol_utils import smiles_to_graph, process_molecule_file, MoleculeNormalizer
-import hashlib
+from psichic_ligand import LigandStore
 import logging
 
 
 class ProteinMoleculeDataset(Dataset):
-    def __init__(self, sequence_data, molecule_dict={}, molecule_folder='', 
+    def __init__(self, sequence_data, *, molecule_folder,
                  protein_dict={}, protein_folder='', result_path='', dataset_tag='', 
                  source_data_column=None, device='cpu', 
-                 molecule_error_log='molecule_error_log.txt', standardize=True, timeout=10):
+                 molecule_error_log='molecule_error_log.txt', timeout=10):
         super(ProteinMoleculeDataset, self).__init__()
 
         if isinstance(sequence_data,pd.core.frame.DataFrame):
@@ -74,8 +73,7 @@ class ProteinMoleculeDataset(Dataset):
         else:
             raise Exception('Must be a pandas dataframe..')
         
-        self.mol_dict = molecule_dict
-        self.mol_folder = molecule_folder
+        self.ligands = LigandStore(molecule_folder, error_log=molecule_error_log, timeout_seconds=timeout)
         self.prot_dict = protein_dict
         self.prot_folder = protein_folder
         self.result_path = result_path
@@ -86,8 +84,6 @@ class ProteinMoleculeDataset(Dataset):
         self.molecule_error_log = molecule_error_log
         
         self.timeout = timeout
-        self.standardize = standardize
-        self.error_molecule = set()
         # Setup logging 
         self.setup_logging()
     
@@ -107,59 +103,7 @@ class ProteinMoleculeDataset(Dataset):
             level=logging.ERROR  # Log level: capture errors and above
         )
 
-    def safe_smiles_filename(self, smiles):
-        return hashlib.sha256(smiles.encode()).hexdigest()[:32]
 
-    def mol_graph(self, mol_key):
-        ## mol in a dictionary
-        if mol_key in self.mol_dict:
-            return self.mol_dict[mol_key]
-        ## mol in a folder
-        else:
-            mol_filename = self.safe_smiles_filename(mol_key)
-            mol_dict_path = os.path.join(self.mol_folder, f"{mol_filename}.pt")
-            ## mol already in the folder then load it
-            if os.path.exists(mol_dict_path):
-                mol_graph = torch.load(mol_dict_path)
-                if mol_graph is None:
-                    raise Exception('Molecule is None')
-                return mol_graph
-            
-            ## mol not yet in the folder - process, save it for next time
-            else:
-                if mol_key in self.error_molecule:
-                    raise Exception('Molecule is None as previously failed')
-                ## Standard + Normalize, or just Normalize
-                normalizer = MoleculeNormalizer(timeout_seconds=self.timeout)
-                if self.standardize:
-                    result = normalizer.standardize_normalize(mol_key)
-                else:
-                    result = normalizer.normalize(mol_key)
-                norm_smi = result.smiles
-                status = result.status
-                error_message = result.error_message
-                
-                # catch error if the SMILES is None
-                if norm_smi is None:
-                    self.error_molecule.add(mol_key)
-
-                    with open(self.molecule_error_log, 'a') as f:
-                        f.write(f"||||| {mol_key} ||||| with status (failed to normalize because [{status}]); and error message - {error_message}\n")
-                    raise Exception('Molecule SMILES is None')
-                ## Graph Construction
-                mol_graph = smiles_to_graph(norm_smi)
-                # catch error if the graph is None
-                if mol_graph is None:
-                    self.error_molecule.add(mol_key)
-
-                    with open(self.molecule_error_log, 'a') as f:
-                        f.write(f"||||| {mol_key} ||||| with status (successful normalization but fail at graph construction); and error message - None\n")
-                    raise Exception('Molecule is None')
-                
-                ## Save graph
-                torch.save(mol_graph, mol_dict_path)
-
-                return mol_graph
                 
     
     def prot_graph(self, prot_key):
@@ -193,7 +137,7 @@ class ProteinMoleculeDataset(Dataset):
             reg_y = torch.tensor(reg_y if not pd.isna(reg_y) else float('nan')).float()
             cls_y = torch.tensor(cls_y if not pd.isna(cls_y) else float('nan')).float()
             
-            mol = self.mol_graph(str(mol_key))
+            mol = self.ligands.get(str(mol_key))
             prot = self.prot_graph(str(prot_key))
 
             # Create MultiGraphData for positive pair

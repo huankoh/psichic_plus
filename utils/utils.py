@@ -1,7 +1,7 @@
+from psichic_ligand import LigandStore
 import os
 import numpy as np
 import sys
-import hashlib
 
 # Check if the code is running in a Jupyter notebook
 if 'ipykernel' in sys.modules:
@@ -245,7 +245,8 @@ def ligand_degree_from_dict(ligand_dict):
 
 
 def minmax_norm(arr):
-    return (arr - arr.min())/(arr.max() - arr.min())
+    span = arr.max() - arr.min()
+    return np.zeros_like(arr) if span == 0 else (arr - arr.min()) / span
 
 def percentile_rank(arr):
     return np.argsort(np.argsort(arr)) / (len(arr)-1) 
@@ -274,21 +275,11 @@ def store_ligand_score(ligand_smiles, atom_types, atom_scores, ligand_path):
 
     return True
     
-def safe_smiles_filename(smiles):
-    return hashlib.sha256(smiles.encode()).hexdigest()[:32]
 
 
-def load_ligand_from_path(ligand_path, ligand_key):
-    ligand_filename = safe_smiles_filename(ligand_key)
-    ligand_file = os.path.join(ligand_path, f"{ligand_filename}.pt")
-    if not os.path.exists(ligand_file):
-        raise FileNotFoundError(f"Ligand file not found: {ligand_file}")
-
-    ligand_data = torch.load(ligand_file)
-    return ligand_data
 
 def store_result(df, attention_dict, ids, interaction_keys, 
-                protein_dict, ligand_path, 
+                protein_dict, ligands: LigandStore | None,
                  reg_pred=None, reg_alpha=None, reg_beta=None, 
                  result_path='', save_interpret=True, save_cluster=False):
     
@@ -341,7 +332,7 @@ def store_result(df, attention_dict, ids, interaction_keys,
                 protein_interpret.to_csv(os.path.join(pair_path,'protein.csv'),index=False)
                 
                 
-                ligand_data = load_ligand_from_path(ligand_path, key[1])
+                ligand_data = ligands.get(key[1])
                 ligand_smiles = ligand_data['smiles']
                 atom_types = ligand_data['atom_types']
                 ligand_path_out = os.path.join(pair_path,'ligand.pkl')
@@ -355,7 +346,9 @@ def store_result(df, attention_dict, ids, interaction_keys,
                         )
     return df
 
-def virtual_screening(screen_df, model, data_loader, result_path, protein_dict=None, ligand_path=None,  save_interpret=True, device='cpu', save_cluster=False):
+def virtual_screening(screen_df, model, data_loader, result_path, protein_dict=None, ligands: LigandStore | None = None,  save_interpret=True, device='cpu', save_cluster=False):
+    if save_interpret and ligands is None:
+        raise ValueError("LigandStore is required to save interpretations")
     reg_preds = []
     reg_alphas = []
     reg_betas = []
@@ -378,7 +371,7 @@ def virtual_screening(screen_df, model, data_loader, result_path, protein_dict=N
             ids_all.extend(batch_ids)
             screen_df = store_result(
                 screen_df, attention_dict, batch_ids, interaction_keys, 
-                protein_dict, ligand_path, 
+                protein_dict, ligands,
                 reg_pred, reg_alpha, reg_beta, 
                 result_path=result_path, save_interpret=save_interpret, 
                 save_cluster=save_cluster

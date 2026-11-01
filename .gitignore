@@ -21,3 +21,8 @@ trained_weights/**/*.joblib
 trained_weights/**/*.npz
 !trained_weights/PSICHIC_plus/degree.pt
 !trained_weights/PSICHIC_plus/model.pt
+
+psichic-ligand/build/
+*.egg-info/
+*.so
+*.pyd

@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=77", "pybind11==3.1.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "psichic-ligand"
+version = "1.0.0"
+description = "PSICHIC+ ligand normalization and graph featurization, RDKit 2024.03.3 contract"
+requires-python = ">=3.12,<3.13"
+dependencies = []
+license-files = ["LICENSE", "licenses/*", "NOTICE", "src/psichic_ligand/normalization/*/LICENSE"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+psichic_ligand = ["contract/*.jsonl", "normalization/*/LICENSE", "normalization/chembl_structure_pipeline/data/*.smi"]

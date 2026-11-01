@@ -160,19 +160,16 @@ def main():
         ligand_path = os.path.join(args.datafolder, 'ligands')
         if not os.path.exists(ligand_path):
             os.makedirs(ligand_path)
-        ligand_dict = {}
 
         train_dataset = ProteinMoleculeDataset(
-            train_df, ligand_dict, 
-            ligand_path, 
+            train_df, molecule_folder=ligand_path,
             protein_dict=protein_dict,
             protein_folder=None,
             result_path=args.result_path, 
             dataset_tag='train', device=args.device
         )
         test_dataset = ProteinMoleculeDataset(
-            test_df, ligand_dict, 
-            ligand_path, 
+            test_df, molecule_folder=ligand_path,
             protein_dict=protein_dict,
             protein_folder=None,
             result_path=args.result_path, 
@@ -260,12 +257,12 @@ def main():
                     }
                     log_list.append(log_entry)
                     print(f"[{protein}] Iter {iter_count}: Test RMSE: {rmse:.4f}")
-                    torch.save(model.state_dict(), os.path.join(args.result_path, f"best_{protein}_finetuned_seed{args.seed}.pt"))
                     # Track best
                     if rmse < best_rmse:
                         best_rmse = rmse
                         best_iter = iter_count
                         best_metrics = eval_metrics.copy()
+                        torch.save(model.state_dict(), os.path.join(args.result_path, f"best_{protein}_finetuned_seed{args.seed}.pt"))
                     # Save log_entry immediately to a .jsonl file
                     log_jsonl_path = os.path.join(args.result_path, f"{protein}_seed{args.seed}_log.jsonl")
                     with open(log_jsonl_path, 'a') as f_jsonl:
