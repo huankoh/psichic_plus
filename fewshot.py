@@ -257,12 +257,12 @@ def main():
                     }
                     log_list.append(log_entry)
                     print(f"[{protein}] Iter {iter_count}: Test RMSE: {rmse:.4f}")
-                    torch.save(model.state_dict(), os.path.join(args.result_path, f"best_{protein}_finetuned_seed{args.seed}.pt"))
                     # Track best
                     if rmse < best_rmse:
                         best_rmse = rmse
                         best_iter = iter_count
                         best_metrics = eval_metrics.copy()
+                        torch.save(model.state_dict(), os.path.join(args.result_path, f"best_{protein}_finetuned_seed{args.seed}.pt"))
                     # Save log_entry immediately to a .jsonl file
                     log_jsonl_path = os.path.join(args.result_path, f"{protein}_seed{args.seed}_log.jsonl")
                     with open(log_jsonl_path, 'a') as f_jsonl:
