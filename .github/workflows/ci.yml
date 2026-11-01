@@ -1,0 +1,45 @@
+name: CI
+on:
+  push:
+    branches: [main, fast-mol-featurizer]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  ligand:
+    name: ligand (${{ matrix.subdir }}, ${{ matrix.env }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {os: ubuntu-22.04, subdir: linux-64, env: cpu}
+          - {os: ubuntu-22.04, subdir: linux-64, env: gpu}
+          - {os: macos-14, subdir: osx-arm64, env: osx}
+          - {os: macos-13, subdir: osx-64, env: osx}
+          - {os: windows-2022, subdir: win-64, env: cpu}
+    defaults:
+      run:
+        shell: bash -el {0}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Free runner disk space
+        if: runner.os == 'Linux'
+        run: sudo rm -rf /usr/share/dotnet /opt/ghc /opt/hostedtoolcache/CodeQL
+      - uses: conda-incubator/setup-miniconda@v3
+        with:
+          miniforge-version: latest
+          environment-file: environment_${{ matrix.env }}.yml
+          activate-environment: psichic_fp
+          auto-activate-base: false
+      - name: Build the installed package
+        run: pip install --no-build-isolation --no-deps ./psichic-ligand
+      - name: Verify byte identity
+        run: python -m psichic_ligand verify
+      - name: Install test dependencies
+        run: |
+          pip install pytest PyYAML
+          pip install --no-deps chembl-structure-pipeline==1.2.4 papyrus-structure-pipeline==0.0.5
+      - name: Test the package and platform declarations
+        run: python -m pytest -q psichic-ligand/tests tests/test_env_pins.py tests/test_supported_platforms.py

@@ -15,7 +15,7 @@ from pathlib import Path
 from pybind11.setup_helpers import Pybind11Extension, build_ext
 from setuptools import setup
 
-SUPPORTED_SUBDIRS = ("osx-arm64",)
+SUPPORTED_SUBDIRS = ("linux-64", "osx-arm64", "osx-64", "win-64")
 RDKIT_LIBRARIES = (
     "RDKitGraphMol",
     "RDKitSmilesParse",
