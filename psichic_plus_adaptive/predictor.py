@@ -1,5 +1,3 @@
-"""Reuse the existing screening helpers without modifying their modules."""
-
 import importlib.util
 import math
 import os

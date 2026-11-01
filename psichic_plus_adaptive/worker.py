@@ -1,5 +1,3 @@
-"""The lazy external_batch entry point called by the upstream worker."""
-
 import json
 import time
 from dataclasses import asdict

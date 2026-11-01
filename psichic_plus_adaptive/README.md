@@ -43,6 +43,9 @@ The equality check uses batch size one in both paths to keep graph batch composi
 It writes `verification.json` only after the affinity comparison, failure checks, ranking check, and todo comparison pass.
 The primary target is two molecules, so upstream selects a whole three-molecule collection.
 Use a new output directory for every run.
+Each stage has a worker execution deadline of 3600 seconds.
+Set `--stage-timeout` to change it.
+On expiry, the launcher stops the worker process group and exports missing attempts as failures with an `incomplete.json` report.
 
 ## Screen your library
 

@@ -1,5 +1,3 @@
-"""External PSICHIC+ adapter for the pinned AdaptiveFlow-VS workflow."""
-
 from dataclasses import dataclass
 
 UPSTREAM_REVISION = "df74e005e456e94654fa93a40d748de399450b81"

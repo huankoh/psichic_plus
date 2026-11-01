@@ -81,3 +81,22 @@ The user-specified-base Dockerfile copies adapter code and license notices, with
 No shared Docker files or existing inference modules changed.
 No independent reviewer ran in this implementation-only subagent.
 Independent verification belongs to the parent task.
+
+## Independent final verification
+
+Two code reviewers identified the same missing deadline in the external scoring path.
+The launcher now enforces a configurable worker execution deadline per stage, stops the process group on expiry, and reconciles missing tokens into explicit failures.
+Seven redundant module docstrings were removed after comment review.
+
+A fresh independent verifier reran the real CPU example in `runs/independent-adaptive-final` after the deadline fix.
+Five successful stage predictions matched direct inference with maximum absolute difference `0.0` at batch size one.
+The generated primary todo remained byte-identical to the executed input.
+The final suite passed 455 tests with three opt-in skips.
+A prior independent run also passed all three opt-in root CLI tests.
+The adapter behavior suite passed 24 tests, including descendant process cleanup on timeout.
+
+The verifier also ran the real CLI with `--stage-timeout 0.01` in `runs/independent-timeout-final`.
+The command exited with code 1, exported all four missing scheduled tokens as completion failures, and created no primary stage.
+A separate instrumented timeout run checked the launched process group after exit.
+The operating system reported that the process group no longer existed.
+Docker and CUDA remain unverified for the runtime reasons above.

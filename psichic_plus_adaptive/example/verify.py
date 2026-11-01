@@ -1,5 +1,3 @@
-"""Run the real two-tranche workflow and compare every scored item with the existing CLI."""
-
 import argparse
 import hashlib
 import json

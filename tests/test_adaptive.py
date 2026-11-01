@@ -280,3 +280,19 @@ def test_reconciliation_rejects_corrupt_predictions(tmp_path, corruption):
     with pytest.raises(RuntimeError, match='Incomplete'):
         reconcile(tmp_path, [molecule], {'1': {'subjobs': {'0': {}}}})
     assert len(pd.read_csv(tmp_path / 'results.csv')) == 1
+
+
+def test_command_timeout_stops_descendants(tmp_path):
+    import sys
+    import time
+    from psichic_plus_adaptive.workflow import command
+
+    started = tmp_path / 'started'
+    escaped = tmp_path / 'escaped'
+    child = f"import time; from pathlib import Path; Path({str(started)!r}).touch(); time.sleep(1); Path({str(escaped)!r}).touch()"
+    parent = "import subprocess, sys, time; subprocess.Popen([sys.executable, '-c', sys.argv[1]]); time.sleep(30)"
+    with pytest.raises(subprocess.TimeoutExpired):
+        command([sys.executable, '-c', parent, child], tmp_path, timeout=0.5)
+    assert started.exists()
+    time.sleep(1)
+    assert not escaped.exists()

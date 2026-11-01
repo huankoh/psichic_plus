@@ -1,5 +1,3 @@
-"""Run the pinned upstream Bash workflow and reconcile its completion records."""
-
 import gzip
 import hashlib
 import json
@@ -7,8 +5,10 @@ import math
 import os
 import re
 import shutil
+import signal
 import subprocess
 import sys
+import time
 from dataclasses import asdict
 from pathlib import Path
 
@@ -20,11 +20,20 @@ from .library import collection_key, convert_library, read_library, safe_token
 PACKAGE = Path(__file__).resolve().parent
 
 
-def command(args: list[str], cwd: Path, env: dict | None = None) -> None:
+def command(args: list[str], cwd: Path, env: dict | None = None, timeout: float | None = None) -> None:
     with (cwd / "commands.log").open("a") as handle:
         handle.write(json.dumps(args) + "\n")
         handle.flush()
-        subprocess.run(args, cwd=cwd, env=env, stdout=handle, stderr=subprocess.STDOUT, check=True)
+        with subprocess.Popen(args, cwd=cwd, env=env, stdout=handle, stderr=subprocess.STDOUT,
+                              start_new_session=True) as process:
+            try:
+                returncode = process.wait(timeout=timeout)
+            except subprocess.TimeoutExpired:
+                os.killpg(process.pid, signal.SIGKILL)
+                process.wait()
+                raise
+            if returncode:
+                raise subprocess.CalledProcessError(returncode, args)
 
 
 def checked_upstream(source: Path, destination: Path) -> Path:
@@ -152,7 +161,7 @@ def reconcile(stage: Path, expected: list[Molecule], workunits: dict, execution_
 
 
 def run_stage(upstream: Path, stage: Path, library: Path, todo: Path, expected: list[Molecule],
-              config: dict, samples_per_tranche: int, env: dict) -> pd.DataFrame:
+              config: dict, samples_per_tranche: int, env: dict, stage_timeout: float = 3600) -> pd.DataFrame:
     tools = stage_tools(upstream, stage)
     inputs = stage / "input-files" / "psichic"
     inputs.mkdir(parents=True)
@@ -184,9 +193,14 @@ def run_stage(upstream: Path, stage: Path, library: Path, todo: Path, expected: 
     workunits = json.loads((stage / "workflow" / "status.json").read_text())['workunits']
     command([sys.executable, "afvs_submit_jobs.py", "1", str(len(workunits))], tools, env)
     execution_error = None
+    deadline = time.monotonic() + stage_timeout
     for workunit in workunits:
         try:
-            command(["bash", str(stage / "workflow" / "workunits" / workunit / "run.bash")], tools, env)
+            command(["bash", str(stage / "workflow" / "workunits" / workunit / "run.bash")], tools, env,
+                    timeout=max(0, deadline - time.monotonic()))
+        except subprocess.TimeoutExpired:
+            execution_error = f"Stage exceeded {stage_timeout} seconds; worker process group stopped"
+            break
         except subprocess.CalledProcessError as error:
             execution_error = f"Upstream worker exited with {error.returncode}; inspect tools/commands.log"
             break
@@ -240,7 +254,9 @@ def select_primary(upstream: Path, library: Path, prescreen: pd.DataFrame,
 
 
 def run(library_csv: Path, fasta: Path, model_dir: Path, upstream: Path, output: Path,
-        samples_per_tranche: int, primary_target: int, device: str, batch_size: int) -> None:
+        samples_per_tranche: int, primary_target: int, device: str, batch_size: int, stage_timeout: float = 3600) -> None:
+    if not math.isfinite(stage_timeout) or stage_timeout <= 0:
+        raise ValueError("Stage timeout must be positive and finite")
     molecules = read_library(library_csv)
     if samples_per_tranche < 1 or primary_target < 1 or batch_size < 1:
         raise ValueError("Sample count, primary target, and batch size must be positive")
@@ -264,11 +280,11 @@ def run(library_csv: Path, fasta: Path, model_dir: Path, upstream: Path, output:
     config = {"fasta": str(output / "target.fasta"), "model_dir": str(model_dir.resolve()),
               "device": device, "cache": str(output / "cache"), "batch_size": batch_size}
     prescreen = run_stage(prepared, output / "prescreen", library, library / "prescreen.todo",
-                          [m for m in molecules if m.token in samples], config, samples_per_tranche, env)
+                          [m for m in molecules if m.token in samples], config, samples_per_tranche, env, stage_timeout)
     todo = select_primary(prepared, library, prescreen, primary_target, output, env)
     selected = {line.split()[0] for line in todo.read_text().splitlines()}
     primary = run_stage(prepared, output / "primaryscreen", library, todo,
-                        [m for m in molecules if collection_key(m) in selected], config, samples_per_tranche, env)
+                        [m for m in molecules if collection_key(m) in selected], config, samples_per_tranche, env, stage_timeout)
     ranked = primary[primary.status == "success"].sort_values(['raw_affinity', 'token'], ascending=[False, True])
     ranked.to_csv(output / "ranked.csv", index=False)
     (output / "run.json").write_text(json.dumps({

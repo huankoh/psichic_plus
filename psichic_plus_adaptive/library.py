@@ -1,5 +1,3 @@
-"""Translate a string-ID library into AdaptiveFlow collections."""
-
 import csv
 import hashlib
 import io
