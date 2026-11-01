@@ -36,6 +36,8 @@ def read_catalogue(building_blocks: Path, reaction_map: Path, chemical_space: st
             identifier, smiles = row["reagent_id"], row["smiles"]
             if not identifier or not smiles or not identifier.strip() or not smiles.strip():
                 raise ValueError("Building-block IDs and SMILES must not be empty")
+            if identifier == "-1":
+                raise ValueError("Building-block ID -1 is reserved for upstream intermediate reactants")
             if identifier in identifiers or smiles in smiles_to_id:
                 raise ValueError(f"Duplicate building-block ID or SMILES at {identifier!r}, {smiles!r}")
             if Chem.MolFromSmiles(smiles) is None:
@@ -73,7 +75,10 @@ def read_catalogue(building_blocks: Path, reaction_map: Path, chemical_space: st
 
 
 def make_generator(catalogue: Catalogue, scorer: PSICHICScorer, max_reactions: int, seed: int) -> Generator:
-    reactions = copy.deepcopy(CHEMICAL_SPACE_TO_REACTIONS[catalogue.chemical_space])
+    reactions = copy.deepcopy(tuple(
+        reaction for reaction in CHEMICAL_SPACE_TO_REACTIONS[catalogue.chemical_space]
+        if all(catalogue.reaction_map[reaction.id].values())
+    ))
     set_all_building_blocks(reactions, set(catalogue.smiles_to_id))
     for reaction in reactions:
         for index, reactant in enumerate(reaction.reactants):

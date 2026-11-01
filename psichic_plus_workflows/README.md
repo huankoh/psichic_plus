@@ -45,19 +45,21 @@ Use output paths beneath `/runs` to retain results after the container exits.
 
 ## Verify AdaptiveFlow screening
 
-Supply a clean upstream checkout at `df74e005e456e94654fa93a40d748de399450b81` as described in the [AdaptiveFlow guide](../psichic_plus_adaptive/README.md).
+The image includes AdaptiveFlow-VS at `df74e005e456e94654fa93a40d748de399450b81` under `/opt/AdaptiveFlow-VS`, with its license and source history.
 The workflow copies and patches it inside the output directory.
 
 ```bash
 docker run --rm --platform linux/amd64 --shm-size=4g \
   -v /path/to/authorized/PSICHIC_plus:/weights:ro \
-  -v /path/to/af-vs:/upstream:ro \
   -v "$PWD/runs/shared-image:/runs" \
   -v "$PWD/runs/torch-cache:/root/.cache/torch" \
   psichic-workflows:local \
   python -m psichic_plus_adaptive.example.verify \
-  --upstream /upstream --model-dir /weights --output /runs/adaptive --device cpu
+  --upstream /opt/AdaptiveFlow-VS --model-dir /weights --output /runs/adaptive --device cpu
 ```
 
 For a CUDA image, add `--gpus all` and use `--device cuda:0`.
 The image entrypoint is `tini`, so both workflows and the existing `python /opt/min-psichic_plus/inference.py` CLI accept ordinary command arguments.
+
+The bundled AdaptiveFlow-VS source retains its GPL license.
+See the [license notices](../psichic_plus_adaptive/patches/NOTICE.md) before distributing a combined image.

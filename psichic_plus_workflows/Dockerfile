@@ -29,6 +29,8 @@ RUN python -m pip install --no-cache-dir -c /tmp/synthemol/constraints.txt \
     && rm -rf /tmp/synthemol-source \
     && python -m pip check \
     && python -m psichic_ligand verify
+RUN git clone https://github.com/QuantumAI4Bio/AdaptiveFlow-VS.git /opt/AdaptiveFlow-VS \
+    && git -C /opt/AdaptiveFlow-VS checkout --detach df74e005e456e94654fa93a40d748de399450b81
 RUN git config --global --add safe.directory /upstream
 COPY LICENSE /opt/psichic-workflows/LICENSE
 COPY psichic_plus_adaptive/ /opt/psichic-workflows/psichic_plus_adaptive/

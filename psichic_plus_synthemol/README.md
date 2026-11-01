@@ -53,6 +53,7 @@ These predictions and proposed routes do not establish experimental binding or s
 The CSV requires `reagent_id,smiles` columns.
 IDs remain strings, including leading zeros.
 Empty values, duplicate IDs, duplicate exact SMILES, and invalid SMILES cause an error.
+ID `-1` is reserved for upstream intermediate reactants and causes an error.
 SMILES identities are exact input strings, without canonicalization or deduplication across equivalent representations.
 
 The reaction map is a trusted Python pickle with shape `dict[str, dict[int, list[str] | set[str]]]`.
@@ -62,7 +63,8 @@ Include exactly every reaction in the chosen upstream chemical space, including 
 Each reaction contains exactly its zero-based integer reactant slots.
 The loader normalizes slot lists to sets.
 Every mapped SMILES must appear in the CSV and match the slot's upstream SMARTS query.
-Empty slots can disable routes, but at least one reaction must have a building block in every slot.
+A reaction with any empty slot is excluded from search, including reactions that intermediates could otherwise complete.
+At least one reaction must have a building block in every slot.
 Do not commit licensed catalogue data to this repository.
 
 SyntheMol scores building blocks, intermediate combinations, and generated products during search.

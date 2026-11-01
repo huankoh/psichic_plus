@@ -185,3 +185,28 @@ def test_no_products_reports_explicit_failure(tmp_path, monkeypatch, upstream_er
         run(EXAMPLE / "target.fasta", tmp_path, EXAMPLE / "building_blocks.csv",
             EXAMPLE / "real.pkl", "real", tmp_path / "output")
     assert not (tmp_path / "output/molecules.csv").exists()
+
+
+def test_partial_routes_are_disabled_before_search(tmp_path):
+    mapping = pickle.loads((EXAMPLE / "real.pkl").read_bytes())
+    bromide = "Brc1ccccc1"
+    mapping["2230"][1] = {bromide}
+    path = tmp_path / "map.pkl"
+    path.write_bytes(pickle.dumps(mapping))
+    catalogue = read_catalogue(write_blocks(tmp_path, [("0001", AMINE), ("0002", ACID), ("0003", bromide)]),
+                               path, "real")
+    class Predictor:
+        def score(self, inputs):
+            return [Success(token, 100. if smiles == bromide else 1., 0.) for token, smiles in inputs]
+    for max_reactions in (1, 2):
+        generator = make_generator(catalogue, PSICHICScorer(Predictor()), max_reactions, 0)
+        nodes = generator.generate(n_rollout=3)
+        assert nodes
+        assert {reaction.id for reaction in generator.reactions} == {"22"}
+        assert bromide not in generator.all_building_blocks
+
+
+def test_intermediate_sentinel_is_not_a_catalogue_id(tmp_path):
+    with pytest.raises(ValueError, match="reserved.*intermediate"):
+        read_catalogue(write_blocks(tmp_path, [("-1", AMINE), ("0002", ACID)]),
+                       EXAMPLE / "real.pkl", "real")

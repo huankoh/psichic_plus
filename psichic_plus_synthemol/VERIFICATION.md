@@ -153,3 +153,17 @@ Run outputs and the decision trail remain local under the ignored `runs/` direct
 
 Independent code review and a fresh runtime check belong to the parent task.
 This implementation child spawned no subagents.
+
+## Independent review and fixes
+
+The independent panel found three issues in the first implementation.
+The fixes exclude reactions with any empty slot before constructing the upstream generator, reject catalogue ID `-1` reserved for intermediates, and bundle the pinned AdaptiveFlow-VS checkout in the image.
+Two new behavior tests reproduced the catalogue issues before the fix in `runs/independent/review-reproductions.log`.
+After the fix, all 29 focused tests passed in `runs/independent/review-fixes-tests.log`.
+The partial-route regression runs upstream MCTS with both one- and two-reaction budgets.
+
+An earlier independent run at `4439949` passed both SyntheMol spaces and AdaptiveFlow serially with zero prediction differences.
+Its first concurrent AdaptiveFlow run had a worker terminated by signal 9 and reported incomplete output.
+The cause was not proven.
+Fresh serial output is under `runs/independent/adaptive/serial`.
+Core dependencies are pinned, but ranged auxiliary dependencies and the tagged base mean future builds are not fully locked.
