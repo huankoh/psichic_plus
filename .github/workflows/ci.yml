@@ -26,14 +26,13 @@ jobs:
           if set(supported) != {p["subdir"] for p in platforms}:
               raise SystemExit("Supported subdirs differ from the CI platform registry")
           if not supported:
-              raise SystemExit("No platform passed the frozen v1 contract. A parent-approved graph version is required before release.")
+              raise SystemExit("No platform passed the frozen v1 contract. Record a portable graph version before release.")
           with open(os.environ["GITHUB_OUTPUT"], "a") as output:
               output.write("matrix=" + json.dumps({"include": platforms}) + "\n")
           PY
   ligand:
     needs: portability
     if: needs.portability.result == 'success'
-    name: ligand (${{ matrix.subdir }}, ${{ matrix.env }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     strategy:

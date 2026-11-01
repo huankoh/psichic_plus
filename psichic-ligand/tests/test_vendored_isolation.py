@@ -9,7 +9,7 @@ import pathlib
 import sys
 class BlockOriginal(importlib.abc.MetaPathFinder):
     def find_spec(self, fullname, path=None, target=None):
-        if fullname.split('.')[0] in {'utils', 'chembl_structure_pipeline', 'papyrus_structure_pipeline', 'esm'}:
+        if fullname.split('.')[0] in {'utils', 'mol_utils', 'featurizers', 'chembl_structure_pipeline', 'papyrus_structure_pipeline', 'esm'}:
             raise ImportError('Original dependency used: ' + fullname)
 sys.meta_path.insert(0, BlockOriginal())
 import psichic_ligand

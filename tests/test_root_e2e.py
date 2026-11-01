@@ -22,7 +22,7 @@ pytestmark = [
 ]
 
 
-def run_cli(args, *, cwd=ROOT):
+def run_cli(args, *, cwd):
     env = dict(os.environ, OMP_NUM_THREADS="1", OPENBLAS_NUM_THREADS="1", TMPDIR=".")
     result = subprocess.run(
         [sys.executable, *map(str, args)],
@@ -60,6 +60,8 @@ def test_root_cpu_cli_with_one_clique_and_interpretations(tmp_path):
     run_cli(
         [
             ROOT / "inference.py",
+            "--model_dir",
+            ROOT / "trained_weights/PSICHIC_plus",
             "--input_file",
             ROOT / "tests/data/e2e.csv",
             "--output_folder",
@@ -69,7 +71,8 @@ def test_root_cpu_cli_with_one_clique_and_interpretations(tmp_path):
             "--save_interpret",
             "--batch_size",
             "1",
-        ]
+        ],
+        cwd=tmp_path,
     )
     assert_predictions_and_interpretations(output)
     assert not (output / "ligands").exists()
@@ -103,11 +106,11 @@ def test_screening_cpu_cli_reuses_a_versioned_cache(tmp_path):
         tmp_path / "proteins",
     ]
     first, second = tmp_path / "first", tmp_path / "second"
-    run_cli([*args, "--output_folder", first])
+    run_cli([*args, "--output_folder", first], cwd=tmp_path)
     paths = list((cache / FEATURIZATION_VERSION).glob("*.pt"))
     assert len(paths) == 3
     before = {p.name: (p.stat().st_mtime_ns, p.read_bytes()) for p in paths}
-    run_cli([*args, "--output_folder", second])
+    run_cli([*args, "--output_folder", second], cwd=tmp_path)
     pd.testing.assert_frame_equal(
         assert_predictions_and_interpretations(first),
         assert_predictions_and_interpretations(second),
