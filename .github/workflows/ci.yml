@@ -14,11 +14,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - {os: ubuntu-22.04, subdir: linux-64, env: cpu}
-          - {os: ubuntu-22.04, subdir: linux-64, env: gpu}
-          - {os: macos-14, subdir: osx-arm64, env: osx}
-          - {os: macos-13, subdir: osx-64, env: osx}
-          - {os: windows-2022, subdir: win-64, env: cpu}
+          - {os: macos-15-intel, subdir: osx-64, env: osx}
     defaults:
       run:
         shell: bash -el {0}
