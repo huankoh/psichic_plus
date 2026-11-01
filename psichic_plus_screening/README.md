@@ -2,9 +2,10 @@
 
 
 The screening CLI uses the installed `psichic_ligand` package shared with root inference.
-Its frozen v1 contract currently has no supported platform, so new package and Docker builds refuse to proceed.
+The package supports Linux x86-64 and Apple Silicon macOS with the pinned environments.
 See [the root build status](../README.md#ligand-build-status) before using the commands below.
-The CLI and cache behavior were checked locally on CPU; the image and GPU run are not verified for this port.
+CI builds the image and verifies the ligand package inside it.
+The screening CLI was checked on CPU, but inference on a GPU has not been tested for this port.
 
 ## Contents
 

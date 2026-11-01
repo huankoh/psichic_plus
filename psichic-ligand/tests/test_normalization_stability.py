@@ -2,10 +2,8 @@
 
 import dataclasses
 import threading
-from types import SimpleNamespace
 
 import pytest
-from rdkit import Chem
 
 from helpers import graph_digest
 
@@ -19,13 +17,11 @@ ASPIRIN = "CC(=O)Oc1ccccc1C(=O)O"
 def install_passes(monkeypatch, normalizer, transitions):
     calls = []
 
-    def standardize(mol):
-        current = Chem.MolToSmiles(mol)
+    def normalize(current):
         calls.append(current)
-        target = transitions.get(current, current)
-        return Chem.MolFromSmiles(target), SimpleNamespace(value=1)
+        return pipeline.NormalizationResult(transitions.get(current, current), "SUCCESS")
 
-    monkeypatch.setattr(normalizer, "_standardize_molecule", standardize)
+    monkeypatch.setattr(normalizer, "_normalize_once", normalize)
     return calls
 
 
@@ -69,33 +65,28 @@ def test_limit_does_not_return_the_last_unconfirmed_molecule(monkeypatch):
 
 
 @pytest.mark.parametrize("smiles", ["not-a-smiles", "C("])
-def test_invalid_smiles_never_enters_standardization(monkeypatch, smiles):
-    normalizer = pipeline.MoleculeNormalizer()
-    calls = install_passes(monkeypatch, normalizer, {})
-    assert normalizer.standardize_normalize(smiles) == pipeline.NormalizationResult(
-        None, "INVALID_SMILES", "Could not parse SMILES",
-    )
-    assert calls == []
+def test_invalid_smiles_returns_a_failure(smiles):
+    result = pipeline.MoleculeNormalizer().standardize_normalize(smiles)
+    assert result.status == "INVALID_SMILES"
+    assert result.smiles is None
 
 
-@pytest.mark.parametrize("out_type,status,message", [
-    (2, "NON_SMALL_MOLECULE", "Molecular weight outside allowed range"),
-    (3, "INORGANIC_MOLECULE", "Molecule contains non-organic elements"),
-    (4, "MIXTURE", "Multiple fragments detected"),
-    (5, "STANDARDIZATION_ERROR", "General standardization error"),
-    (99, "UNKNOWN_ERROR", "Unknown standardization result type: 99"),
+@pytest.mark.parametrize("status,message", [
+    ("NON_SMALL_MOLECULE", "Molecular weight outside allowed range"),
+    ("MIXTURE", "Multiple fragments detected"),
+    ("GENERAL_ERROR", "General standardization error"),
 ])
-def test_intermediate_failure_keeps_original_status(monkeypatch, out_type, status, message):
+def test_intermediate_failure_keeps_original_status(monkeypatch, status, message):
     normalizer = pipeline.MoleculeNormalizer()
     calls = []
 
-    def standardize(mol):
-        calls.append(Chem.MolToSmiles(mol))
+    def normalize(smiles):
+        calls.append(smiles)
         if len(calls) == 1:
-            return Chem.MolFromSmiles("CCCCCCCCC"), SimpleNamespace(value=1)
-        return mol, SimpleNamespace(value=out_type)
+            return pipeline.NormalizationResult("CCCCCCCCC", "SUCCESS")
+        return pipeline.NormalizationResult(None, status, message)
 
-    monkeypatch.setattr(normalizer, "_standardize_molecule", standardize)
+    monkeypatch.setattr(normalizer, "_normalize_once", normalize)
     assert normalizer.standardize_normalize("CCCCCCCC") == pipeline.NormalizationResult(None, status, message)
     assert calls == ["CCCCCCCC", "CCCCCCCCC"]
 
@@ -104,13 +95,13 @@ def test_intermediate_exception_does_not_return_previous_success(monkeypatch):
     normalizer = pipeline.MoleculeNormalizer()
     calls = []
 
-    def standardize(mol):
-        calls.append(Chem.MolToSmiles(mol))
+    def standardize(smiles):
+        calls.append(smiles)
         if len(calls) == 1:
-            return Chem.MolFromSmiles("CCCCCCCCC"), SimpleNamespace(value=1)
+            return pipeline.NormalizationResult("CCCCCCCCC", "SUCCESS")
         raise ValueError("second pass failed")
 
-    monkeypatch.setattr(normalizer, "_standardize_molecule", standardize)
+    monkeypatch.setattr(normalizer, "_normalize_once", standardize)
     assert normalizer.standardize_normalize("CCCCCCCC") == pipeline.NormalizationResult(
         None, "GENERAL_ERROR", "second pass failed",
     )
@@ -124,14 +115,13 @@ def test_timeout_budget_covers_all_passes_in_one_worker(monkeypatch):
     calls = []
     monkeypatch.setattr(pipeline.time, "monotonic", lambda: clock[0])
 
-    def standardize(mol):
+    def standardize(current):
         threads.append(threading.current_thread())
-        current = Chem.MolToSmiles(mol)
         calls.append(current)
         clock[0] += 4
-        return Chem.MolFromSmiles(current + "C"), SimpleNamespace(value=1)
+        return pipeline.NormalizationResult(current + "C", "SUCCESS")
 
-    monkeypatch.setattr(normalizer, "_standardize_molecule", standardize)
+    monkeypatch.setattr(normalizer, "_normalize_once", standardize)
     assert normalizer.standardize_normalize("CCCCCCCC") == pipeline.NormalizationResult(
         None, "TIMEOUT", "Standardization timeout",
     )
@@ -145,13 +135,13 @@ def test_late_result_or_exception_cannot_override_deadline(monkeypatch, late_fai
     clock = [0.0]
     monkeypatch.setattr(pipeline.time, "monotonic", lambda: clock[0])
 
-    def standardize(mol):
+    def standardize(smiles):
         clock[0] = 11
         if late_failure:
             raise ValueError("failed after the deadline")
-        return mol, SimpleNamespace(value=1)
+        return pipeline.NormalizationResult(smiles, "SUCCESS")
 
-    monkeypatch.setattr(normalizer, "_standardize_molecule", standardize)
+    monkeypatch.setattr(normalizer, "_normalize_once", standardize)
     assert normalizer.standardize_normalize(ASPIRIN).status == "TIMEOUT"
 
 
@@ -161,8 +151,7 @@ def test_timed_out_worker_stops_before_another_pass_and_cannot_poison_reuse(monk
     started, release = threading.Event(), threading.Event()
     old_workers, calls = [], []
 
-    def standardize(mol):
-        current = Chem.MolToSmiles(mol)
+    def standardize(current):
         calls.append(current)
         if current == "CCCCCCCC":
             old_workers.append(threading.current_thread())
@@ -170,10 +159,10 @@ def test_timed_out_worker_stops_before_another_pass_and_cannot_poison_reuse(monk
             assert release.wait(5)
             if late_failure:
                 raise ValueError("old worker failed")
-            return Chem.MolFromSmiles("CCCCCCCCC"), SimpleNamespace(value=1)
-        return mol, SimpleNamespace(value=1)
+            return pipeline.NormalizationResult("CCCCCCCCC", "SUCCESS")
+        return pipeline.NormalizationResult(current, "SUCCESS")
 
-    monkeypatch.setattr(normalizer, "_standardize_molecule", standardize)
+    monkeypatch.setattr(normalizer, "_normalize_once", standardize)
     try:
         assert normalizer.standardize_normalize("CCCCCCCC").status == "TIMEOUT"
         assert started.wait(5)

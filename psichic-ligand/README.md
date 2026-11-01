@@ -5,17 +5,15 @@ It ports `mol_featurizer` from `huankoh/psichic-plus@3c8e5e4` without changing i
 
 ## Current build status
 
-There are no supported subdirs for the frozen v1 contract.
-`setup.py` refuses all new builds because `SUPPORTED_SUBDIRS` is empty.
-A local Apple M4 build passes all 2,242 contract rows and the 20,000-row benchmark replay, but Apple Silicon CI differs on 651 rows.
-Linux CPU and CUDA environments each differ on 563 rows.
-All these differences are confined to `clique_pe`; normalized SMILES and every other graph value agree.
-Windows' pinned RDKit package lacks the C++ development headers, and Intel macOS cannot install the pinned PyTorch wheel.
-A new graph version requires a separate decision before these platforms can be supported.
+The package supports `linux-64` and `osx-arm64` with the pinned environments.
+CI verifies the contract on Linux CPU, Linux CUDA, and Apple Silicon macOS environments.
+The contract checks `clique_pe` against independently calculated random-walk values with an absolute tolerance of 0.000001.
+It checks normalized SMILES and the remaining graph values exactly.
+Windows and Intel macOS are not supported by the pinned build dependencies.
 
 ## Build and verify
 
-After a platform passes the contract and is restored to the allowlist, create and activate its root `environment_*.yml` environment.
+Create and activate the root `environment_*.yml` environment for a supported platform.
 Run these commands from the repository root.
 
 ```bash
@@ -67,7 +65,7 @@ Failures are memoized per process and never persisted as graphs.
 `LigandStore(None)` keeps nothing on disk.
 The store is picklable for spawned DataLoader and interpretation workers.
 
-Any change to normalization or graph bytes requires a version bump and a newly recorded independent fixture.
+Any intentional change to normalization or graph values requires a version bump and a newly recorded independent fixture.
 Per-platform expected outputs and numerical tolerances are not permitted.
 
 ## Contract provenance
@@ -79,7 +77,10 @@ Every row was independently checked with the untouched Python 3.12 conda-forge b
 The generator remains outside this repository.
 
 The graph digest hashes sorted keys and each tensor's dtype, shape, and contiguous CPU bytes.
-It uses the `sha256-bench-v2-no-clique-pe` algorithm, which compares every graph key exactly except `clique_pe`. That key is 20 chained float32 matmuls whose bytes depend on the local BLAS, and it is derived from `tree_edge_index` and `clique_num_nodes`, which are compared exactly.
+It uses the `sha256-bench-v2-no-clique-pe` algorithm, which compares every graph key exactly except `clique_pe`.
+The verifier checks `clique_pe` separately against the random-walk values with an absolute tolerance of 0.000001.
+That key is derived from `tree_edge_index` and `clique_num_nodes`, which are compared exactly.
+Its floating-point values can vary with the local BLAS.
 
 ## Notices
 

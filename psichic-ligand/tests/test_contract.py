@@ -75,3 +75,25 @@ def test_public_function_equals_composition_on_fifty_contract_rows():
                 == independent_digest(smiles_to_graph(normalized.smiles))
                 == row.digest
             )
+
+
+def test_verify_checks_clique_pe_with_tolerance(monkeypatch):
+    import torch
+    import psichic_ligand._contract as contract
+
+    header, rows = load_contract(FEATURIZATION_VERSION)
+    row = next(row for row in rows if row.smiles and row.digest)
+    graph = featurize_ligand(row.raw)
+    monkeypatch.setattr(contract, "load_contract", lambda version: (header, [row]))
+    monkeypatch.setattr(contract, "featurize_ligand", lambda *args, **kwargs: graph)
+    assert contract.verify().ok
+    graph["clique_pe"] = graph["clique_pe"] + 0.0000005
+    assert contract.verify().ok
+    graph["clique_pe"] += 0.001
+    assert any(m.field == "clique_pe" for m in contract.verify().mismatches)
+    graph["clique_pe"] = torch.full_like(graph["clique_pe"], float("nan"))
+    assert any(m.field == "clique_pe" for m in contract.verify().mismatches)
+    graph["clique_pe"] = torch.zeros((1, 1))
+    assert any(m.field == "clique_pe" for m in contract.verify().mismatches)
+    del graph["clique_pe"]
+    assert any(m.field == "clique_pe" for m in contract.verify().mismatches)

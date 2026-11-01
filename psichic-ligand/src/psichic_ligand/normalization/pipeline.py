@@ -17,7 +17,6 @@ T = TypeVar("T")
 # Salts runtime.safe_smiles_filename so @100 graphs do not mix with legacy @1000.
 NORMALIZATION_VERSION = "rdkit-2024.03.3-enumpick-max100-v1"
 MAX_NORMALIZATION_PASSES = 20
-_STDLIB_THREAD = threading.Thread
 
 
 class TimeoutHandler:
@@ -25,9 +24,6 @@ class TimeoutHandler:
         self.timeout_seconds = timeout_seconds
 
     def run_with_timeout(self, func: Callable[..., T], *args, **kwargs) -> Optional[T]:
-        if self.timeout_seconds >= 10 and threading.Thread is _STDLIB_THREAD:
-            return func(*args, **kwargs)
-
         # A timed-out worker can finish after another invocation has started.
         # Keep its result and exception private to this invocation.
         result: Optional[T] = None
@@ -63,27 +59,6 @@ class MoleculeNormalizer:
     def __init__(self, timeout_seconds: int = 10):
         self.timeout_handler = TimeoutHandler(timeout_seconds)
 
-    def _standardize_molecule(self, mol):
-        try:
-            if Papyrus_standardizer._chembl_may_change(mol):
-                mol = Papyrus_standardizer._apply_chembl_standardization(mol)
-            kind, _out, err, blob = _native_papyrus_rest(bytes(mol.ToBinary()))
-            if kind == "mixture":
-                return (None, Papyrus_standardizer.StandardizationResult.MIXTURE_MOLECULE)
-            if kind == "non_small":
-                return (None, Papyrus_standardizer.StandardizationResult.NON_SMALL_MOLECULE)
-            if kind == "need_chembl2":
-                taut = Chem.Mol(blob)
-                taut = Papyrus_standardizer._apply_chembl_standardization(taut)
-                return (taut, Papyrus_standardizer.StandardizationResult.CORRECT_MOLECULE)
-            if kind == "ok":
-                return (Chem.Mol(blob), Papyrus_standardizer.StandardizationResult.CORRECT_MOLECULE)
-            raise RuntimeError("Molecule could not be standardized")
-        except RuntimeError:
-            raise
-        except Exception as exc:
-            raise RuntimeError("Molecule could not be standardized") from exc
-
     def _result_from_native(self, kind, out, err, blob) -> NormalizationResult:
         if kind == "ok":
             return NormalizationResult(out, "SUCCESS", None)
@@ -110,50 +85,18 @@ class MoleculeNormalizer:
             return NormalizationResult(None, "GENERAL_ERROR", err)
         return NormalizationResult(None, "GENERAL_ERROR", f"Unknown native result: {kind}")
 
-    def _normalize_once_python(self, smiles: str) -> NormalizationResult:
-        mol = Chem.MolFromSmiles(smiles)
-        if mol is None:
-            return NormalizationResult(None, "INVALID_SMILES", "Could not parse SMILES")
-
-        result = self._standardize_molecule(mol)
-        if result is None:
-            return NormalizationResult(None, "TIMEOUT", "Standardization timeout")
-
-        out_type = result[1].value
-        status_mapping = {
-            1: ("SUCCESS", None),
-            2: ("NON_SMALL_MOLECULE", "Molecular weight outside allowed range"),
-            3: ("INORGANIC_MOLECULE", "Molecule contains non-organic elements"),
-            4: ("MIXTURE", "Multiple fragments detected"),
-            5: ("STANDARDIZATION_ERROR", "General standardization error"),
-        }
-        if out_type != 1:
-            status, message = status_mapping.get(
-                out_type,
-                ("UNKNOWN_ERROR", f"Unknown standardization result type: {out_type}"),
-            )
-            return NormalizationResult(None, status, message)
-
-        normalized_smiles = Chem.MolToSmiles(result[0], isomericSmiles=False, canonical=True)
-        return NormalizationResult(normalized_smiles, "SUCCESS", None)
-
     def _normalize_once(self, smiles: str) -> NormalizationResult:
-        impl = self._standardize_molecule
-        if getattr(impl, "__func__", impl) is MoleculeNormalizer._standardize_molecule:
-            kind, out, err, blob = _native_normalize_once(smiles)
-            if kind == "need_chembl1":
-                mol = Chem.MolFromSmiles(smiles)
-                if mol is None:
-                    return NormalizationResult(
-                        None, "INVALID_SMILES", "Could not parse SMILES"
-                    )
-                try:
-                    mol = Papyrus_standardizer._apply_chembl_standardization(mol)
-                    kind, out, err, blob = _native_papyrus_rest(bytes(mol.ToBinary()))
-                except Exception as exc:
-                    raise RuntimeError("Molecule could not be standardized") from exc
-            return self._result_from_native(kind, out, err, blob)
-        return self._normalize_once_python(smiles)
+        kind, out, err, blob = _native_normalize_once(smiles)
+        if kind == "need_chembl1":
+            mol = Chem.MolFromSmiles(smiles)
+            if mol is None:
+                return NormalizationResult(None, "INVALID_SMILES", "Could not parse SMILES")
+            try:
+                mol = Papyrus_standardizer._apply_chembl_standardization(mol)
+                kind, out, err, blob = _native_papyrus_rest(bytes(mol.ToBinary()))
+            except Exception as exc:
+                raise RuntimeError("Molecule could not be standardized") from exc
+        return self._result_from_native(kind, out, err, blob)
 
     def _normalize_until_stable(self, smiles, deadline, cancelled):
         current = smiles

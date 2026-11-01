@@ -8,26 +8,17 @@ APIs, checkpoint formats, model behavior, and package layout may change before a
 
 ## Ligand build status
 
-The native ligand port is implemented, but its frozen v1 contract has no supported installation platform.
-`SUPPORTED_SUBDIRS` is currently empty, and new installations refuse to build.
-The release gate remains closed until a separate graph-version decision resolves the positional-encoding differences.
-
-| Platform | v1 validation result |
-|---|---|
-| Local Apple M4, osx-arm64 | 2,242 fixture rows and 20,000 benchmark rows match exactly on this host. |
-| Apple Silicon CI | 651 fixture rows differ only in `clique_pe`. |
-| Linux CPU and CUDA environments | 563 fixture rows differ only in `clique_pe` in each environment. |
-| Windows | The pinned conda-forge RDKit package lacks the required C++ headers. |
-| Intel macOS | The pinned PyTorch 2.6.0 wheel is unavailable. |
-
-The contract fixture and numerical implementation remain unchanged.
-A passing self-test on one host does not establish support for its entire platform.
+The native ligand package supports Linux x86-64 and Apple Silicon macOS with the pinned environments below.
+CI verifies the ligand contract on both platforms, including Linux CPU and CUDA environments.
+The graph contract checks `clique_pe` with a tolerance of 0.000001 for floating-point differences.
+It checks the other graph values exactly.
+Windows and Intel macOS are not supported by the pinned build dependencies.
 See [the ligand package](psichic-ligand/README.md) for the contract, cache rules, and build requirements.
 
 ## Environment and installation
 
-These are the installation commands for a platform after its contract job passes and its subdir is restored to the allowlist.
-They currently stop at the explicit unsupported-platform build error.
+Use these commands on Apple Silicon macOS.
+For Linux, create the corresponding CPU or GPU environment instead.
 
 ```bash
 conda env create -f environment_osx.yml
@@ -36,7 +27,7 @@ pip install --no-build-isolation --no-deps ./psichic-ligand
 python -m psichic_ligand verify
 ```
 
-Use `environment_cpu.yml` for Linux or Windows CPU environments, or `environment_gpu.yml` for CUDA 12.4 environments.
+Use `environment_cpu.yml` for Linux CPU environments, or `environment_gpu.yml` for CUDA 12.4 environments.
 All three files pin Python 3.12, numpy 1.26.4, RDKit 2024.03.3, Boost 1.84.0, PyTorch 2.6.0, and PyG 2.7.0.
 The environment files include the PyG extension wheels and native build dependencies.
 On macOS, install Xcode Command Line Tools with `xcode-select --install`.

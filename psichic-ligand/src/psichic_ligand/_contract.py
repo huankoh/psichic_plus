@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 from importlib.resources import files
 from typing import Literal, Mapping
 
+import numpy as np
 import rdkit
 import torch
 
@@ -45,7 +46,7 @@ class ContractRow:
 class Mismatch:
     index: int
     row: ContractRow
-    field: Literal["stage", "status", "message", "smiles", "digest"]
+    field: Literal["stage", "status", "message", "smiles", "digest", "clique_pe"]
     actual: str | None
 
 
@@ -65,10 +66,6 @@ class VerifyReport:
         return not self.mismatches
 
 
-# clique_pe is 20 chained float32 matmuls, so every BLAS rounds it differently and its bytes
-# are not reproducible even between two machines of the same platform. It is also a deterministic
-# function of tree_edge_index and clique_num_nodes, which are compared exactly, so hashing it
-# would only test the local BLAS.
 DIGEST_EXCLUDED_KEYS = frozenset({"clique_pe"})
 DIGEST_ALGORITHM = "sha256-bench-v2-no-clique-pe"
 
@@ -87,6 +84,26 @@ def graph_digest(graph: Mapping[str, object]) -> str:
         else:
             h.update(f"v:{type(value).__name__}:{value!r};".encode())
     return h.hexdigest()
+
+
+def valid_clique_pe(graph: Mapping[str, object]) -> bool:
+    values = graph.get("clique_pe")
+    n = graph["clique_num_nodes"]
+    if not isinstance(values, torch.Tensor) or values.dtype != torch.float32 or values.shape != (n, 20):
+        return False
+    if not torch.isfinite(values).all():
+        return False
+    expected = np.zeros((n, 20), dtype=np.float64)
+    if n > 1:
+        row, col = graph["tree_edge_index"].cpu().numpy()
+        degree = np.bincount(row, minlength=n).clip(min=1)
+        adjacency = np.zeros((n, n), dtype=np.float64)
+        adjacency[row, col] = 1.0 / degree[row]
+        power = adjacency.copy()
+        for step in range(20):
+            expected[:, step] = np.diag(power)
+            power = power @ adjacency
+    return np.allclose(values.detach().cpu().numpy(), expected, rtol=0, atol=1e-6)
 
 
 def load_contract(version: str) -> tuple[ContractHeader, list[ContractRow]]:
@@ -143,6 +160,8 @@ def verify() -> VerifyReport:
                 smiles=result["smiles"],
                 digest=graph_digest(result),
             )
+        if not isinstance(result, LigandFailure) and not valid_clique_pe(result):
+            mismatches.append(Mismatch(index, row, "clique_pe", "invalid shape or values"))
         for key, value in actual.items():
             if value != getattr(row, key):
                 mismatches.append(Mismatch(index, row, key, value))

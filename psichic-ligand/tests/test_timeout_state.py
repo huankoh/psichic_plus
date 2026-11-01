@@ -1,5 +1,6 @@
 """Invocation isolation, including workers completing after a timeout."""
 import threading
+import time
 from types import SimpleNamespace
 
 import pytest
@@ -71,15 +72,15 @@ def test_normalizer_recovers_after_standardization_failure(monkeypatch):
     normalizer = pipeline.MoleculeNormalizer(5)
     smiles = "CC(=O)Oc1ccccc1C(=O)O"
 
-    def fail(mol):
+    def fail(smiles):
         raise ValueError("first molecule failed")
 
-    monkeypatch.setattr(normalizer, "_standardize_molecule", fail)
+    monkeypatch.setattr(normalizer, "_normalize_once", fail)
     failed = normalizer.standardize_normalize(smiles)
     assert (failed.smiles, failed.status, failed.error_message) == (
         None, "GENERAL_ERROR", "first molecule failed")
-    monkeypatch.setattr(normalizer, "_standardize_molecule",
-                        lambda mol: (mol, SimpleNamespace(value=1)))
+    monkeypatch.setattr(normalizer, "_normalize_once",
+                        lambda smiles: pipeline.NormalizationResult(smiles, "SUCCESS"))
     actual = normalizer.standardize_normalize(smiles)
     assert (actual.smiles, actual.status, actual.error_message) == (
         Chem.MolToSmiles(Chem.MolFromSmiles(smiles), isomericSmiles=False),
@@ -164,3 +165,22 @@ def test_overlapping_calls_keep_results_and_errors_separate(monkeypatch, first_f
         assert outcome == ({"exception": error} if first_fails else {"result": "first result"})
     finally:
         resume.set()
+
+
+def test_default_timeout_returns_without_waiting_for_stuck_pass(monkeypatch):
+    normalizer = pipeline.MoleculeNormalizer()
+    started, release = threading.Event(), threading.Event()
+
+    def stuck(smiles):
+        started.set()
+        release.wait(20)
+        return pipeline.NormalizationResult(smiles, "SUCCESS")
+
+    monkeypatch.setattr(normalizer, "_normalize_once", stuck)
+    try:
+        before = time.monotonic()
+        assert normalizer.standardize_normalize("CC").status == "TIMEOUT"
+        assert time.monotonic() - before < 15
+        assert started.is_set()
+    finally:
+        release.set()
