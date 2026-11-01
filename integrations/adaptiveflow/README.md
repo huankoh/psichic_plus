@@ -116,6 +116,8 @@ Failures appear in the native overview's `failed_list` with collection, ligand, 
 They also have archived per-item diagnostics.
 Every submitted item produces one native completion, including a batch that times out or loses its child.
 A failed model child is terminated and reaped before the next batch starts a fresh child.
+A normalization timeout also retires the child after preserving the completed batch results.
+The worker owns the child workspace and removes it after the child is reaped, including after forced termination.
 A child that cannot be reaped disables respawn and reports failures.
 
 Original IDs remain unchanged.

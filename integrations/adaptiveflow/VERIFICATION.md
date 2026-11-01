@@ -69,4 +69,22 @@ The mixed-method test uses a failing fixture executable for native Vina dispatch
 The upstream Athena postprocessing wrapper was not run because these are shared-filesystem Bash runs.
 The fixture helper extracts the native summary columns into the wrapper's existing ranking schema and invokes the real upstream selector directly.
 
-Independent review, independent reruns, and PR creation belong to the root task and remain pending.
+## Independent verification after review fixes
+
+Both independent code reviewers completed their full review.
+All five actionable findings were fixed, including malformed sparse identifiers, invalid UTF-8 completion, the stdout regression, normalization timeout retirement, and forced-termination workspace cleanup.
+The final installed wheel passed all 26 regression tests, Ruff lint and formatting checks, and whitespace checks.
+Fresh host and Docker Linux CPU runs passed the complete native workflow again.
+The linked JSON evidence records these final independent runs.
+
+Actual native workunits retained a failed invalid-UTF-8 ligand while its valid companion succeeded.
+Unsafe traversal, absolute, and missing-separator sparse identifiers produced native failures without an output escape or summary crash.
+A targeted run blocked the real normalizer inside the unchanged production child.
+Its actual failure response contained `TIMEOUT: Standardization timeout`, while its companion retained a successful affinity.
+The supervisor reaped that child, removed its workspace, and recovered with the production child in generation two.
+A second targeted run invoked the patched native dispatcher with a hung child, verified the failed completion and cleanup, and recovered through the same callback using the actual model.
+
+The full independent run commands and outputs are retained locally in `runs/adaptiveflow-native-final-independent/commands.sh`.
+The two targeted production lifecycle checks are retained in `runs/adaptiveflow-native-production-lifecycle/checks.py` and `checks.log`.
+These final checks used the same application patch, SHA-256 `d85f8ff4e242c09b60016a460ef6fd100c4bdae37236c15db84574d342399561`, before this evidence record was updated.
+CUDA, remote schedulers, and scaling remain unverified.
