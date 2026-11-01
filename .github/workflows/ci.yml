@@ -8,27 +8,37 @@ on:
 jobs:
   portability:
     runs-on: ubuntu-22.04
+    outputs:
+      matrix: ${{ steps.platforms.outputs.matrix }}
     steps:
       - uses: actions/checkout@v4
       - name: Require a verified ligand platform
+        id: platforms
         run: |
           python - <<'PY'
           import ast
+          import json
+          import os
           from pathlib import Path
           tree = ast.parse(Path("psichic-ligand/setup.py").read_text())
           supported = next(ast.literal_eval(n.value) for n in tree.body if isinstance(n, ast.Assign) and any(isinstance(t, ast.Name) and t.id == "SUPPORTED_SUBDIRS" for t in n.targets))
+          platforms = json.loads(Path(".github/ligand-platforms.json").read_text())
+          if set(supported) != {p["subdir"] for p in platforms}:
+              raise SystemExit("Supported subdirs differ from the CI platform registry")
           if not supported:
               raise SystemExit("No platform passed the frozen v1 contract. A parent-approved graph version is required before release.")
+          with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+              output.write("matrix=" + json.dumps({"include": platforms}) + "\n")
           PY
   ligand:
-    if: ${{ false }}
+    needs: portability
+    if: needs.portability.result == 'success'
     name: ligand (${{ matrix.subdir }}, ${{ matrix.env }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     strategy:
       fail-fast: false
-      matrix:
-        include: []
+      matrix: ${{ fromJSON(needs.portability.outputs.matrix) }}
     defaults:
       run:
         shell: bash -el {0}
@@ -64,3 +74,51 @@ jobs:
           pip install --no-deps chembl-structure-pipeline==1.2.4 papyrus-structure-pipeline==0.0.5
       - name: Test the package and platform declarations
         run: python -m pytest -q psichic-ligand/tests tests/test_env_pins.py tests/test_supported_platforms.py
+
+  e2e:
+    needs: [portability, ligand]
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash -el {0}
+    env:
+      PSICHIC_E2E: "1"
+      TORCH_HOME: ${{ github.workspace }}/.cache/torch
+      OMP_NUM_THREADS: "1"
+      OPENBLAS_NUM_THREADS: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: conda-incubator/setup-miniconda@v3
+        with:
+          miniforge-version: latest
+          environment-file: environment_cpu.yml
+          activate-environment: psichic_fp
+          auto-activate-base: false
+      - name: Configure Linux shared library search
+        run: echo "LD_LIBRARY_PATH=$CONDA_PREFIX/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" >> "$GITHUB_ENV"
+      - name: Build and verify the installed package
+        run: |
+          pip install --no-build-isolation --no-deps ./psichic-ligand
+          python -m psichic_ligand verify
+      - name: Install test dependencies
+        run: |
+          pip install pytest PyYAML
+          pip install --no-deps chembl-structure-pipeline==1.2.4 papyrus-structure-pipeline==0.0.5
+      - uses: actions/cache@v4
+        with:
+          path: ${{ env.TORCH_HOME }}
+          key: esm2-t33-650M-UR50D
+      - name: Test root, screening and few-shot CPU CLIs
+        run: python -m pytest -q tests psichic_plus_screening/tests
+
+  image:
+    needs: [portability, ligand]
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Free runner disk space
+        run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+      - name: Build the screening image and verify its ligand contract
+        run: docker build --platform linux/amd64 -f psichic_plus_screening/docker/Dockerfile.gpu -t psichic-plus-production:gpu .

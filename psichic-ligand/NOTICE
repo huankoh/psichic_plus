@@ -1,4 +1,5 @@
 PSICHIC+ ligand featurization
+Copyright 2023-2026 Huan Yee Koh
 
 Ported from huankoh/psichic-plus mol_featurizer at commit 3c8e5e4.
 The normalization and graph algorithms retain their original behavior.

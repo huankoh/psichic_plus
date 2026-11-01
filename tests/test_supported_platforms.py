@@ -1,4 +1,5 @@
 import ast
+import json
 from pathlib import Path
 
 import yaml
@@ -17,5 +18,15 @@ def test_supported_platforms_equal_the_ligand_ci_matrix():
         )
     )
     workflow = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())
-    matrix = workflow["jobs"]["ligand"]["strategy"]["matrix"]["include"]
+    assert (
+        workflow["jobs"]["ligand"]["strategy"]["matrix"]
+        == "${{ fromJSON(needs.portability.outputs.matrix) }}"
+    )
+    gate = next(
+        step
+        for step in workflow["jobs"]["portability"]["steps"]
+        if step.get("id") == "platforms"
+    )
+    assert ".github/ligand-platforms.json" in gate["run"]
+    matrix = json.loads((ROOT / ".github/ligand-platforms.json").read_text())
     assert set(supported) == {entry["subdir"] for entry in matrix}
