@@ -150,6 +150,7 @@ def extensions(toolchain: RdkitToolchain) -> list[Pybind11Extension]:
             runtime_library_dirs=toolchain.runtime_library_dirs,
             libraries=list(RDKIT_LIBRARIES),
             cxx_std=17,
+            # Hidden RDKit template symbols change normalization results on macOS.
             extra_compile_args=[]
             if sys.platform == "win32"
             else ["-fvisibility=default"],
