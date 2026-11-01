@@ -1,0 +1,103 @@
+--- a/tools/templates/afvs_run.py
++++ b/tools/templates/afvs_run.py
+@@ -59,6 +59,13 @@
+ 
+ logger = logging.getLogger(__name__)
+ 
++
++def queue_size(queue):
++    try:
++        return queue.qsize()
++    except NotImplementedError:
++        return 0
++
+ def read_config_line(line: str) -> Tuple[str, str]:
+     key, sep, value = line.strip().partition("=")
+     return key.strip(), value.strip()
+@@ -159,7 +166,7 @@
+ 
+         # Move it to the next step if there's space
+ 
+-        while unpack_queue.qsize() > 35:
++        while queue_size(unpack_queue) > 35:
+             time.sleep(0.2)
+ 
+         unpack_queue.put(item)
+@@ -184,7 +191,7 @@
+         item['ligands'] = unpack_item(item)
+ 
+         # Next step is to process this
+-        while collection_queue.qsize() > 35:
++        while queue_size(collection_queue) > 35:
+             time.sleep(0.2)
+ 
+         collection_queue.put(item)
+@@ -448,7 +455,7 @@
+ 
+             docking_queue.put(docking_item)
+ 
+-    while docking_queue.qsize() > 100:
++    while queue_size(docking_queue) > 100:
+             time.sleep(0.2)
+ 
+ 
+@@ -543,7 +550,11 @@
+             'reason': ""
+         }
+ 
+-    if batched_item['execution_type'] == "single":
++    if batched_item['execution_type'] == "external_batch":
++        from psichic_plus_adaptive.worker import score_items
++        score_items(batched_item['items'])
++
++    elif batched_item['execution_type'] == "single":
+         for item in batched_item['items']:
+             ret = None
+             start = time.perf_counter()
+@@ -639,7 +650,7 @@
+         raise RuntimeError(f"Invalid ligand processing model for program {scenario['program']}")
+ 
+ 
+-    while summary_queue.qsize() > 200:
++    while queue_size(summary_queue) > 200:
+         time.sleep(0.2)
+ 
+     batched_item['type'] = "docking_complete"
+@@ -3741,6 +3752,9 @@
+     return
+ 
+ DOCKING_PROGRAMS = {
++    'external_batch': {
++        'ligands': 'external_batch',
++    },
+     'MpSDockZN': {
+         'start': docking_start_MpSDockZN,
+         'end': docking_finish_MpSDockZN,
+@@ -4210,7 +4224,7 @@
+             download_queue.put(download_item)
+ 
+             # Don't overflow the queues
+-            while download_queue.qsize() > 25:
++            while queue_size(download_queue) > 25:
+                 time.sleep(0.2)
+ 
+         flush_queue(download_queue, downloader_processes, "download")
+--- a/tools/templates/template1.bash
++++ b/tools/templates/template1.bash
+@@ -25,7 +25,7 @@
+ 
+ export AFVS_WORKUNIT={{workunit_id}}
+ export AFVS_JOB_STORAGE_MODE={{job_storage_mode}}
+-export AFVS_TMP_PATH=/dev/shm
++export AFVS_TMP_PATH="${PSICHIC_ADAPTIVE_TMP:-/dev/shm}"
+ export AFVS_CONFIG_JOB_TGZ={{job_tgz}}
+ export AFVS_TOOLS_PATH=${PWD}/bin
+ export AFVS_VCPUS={{threads_to_use}}
+@@ -36,6 +36,6 @@
+ 	export AFVS_WORKUNIT_SUBJOB=${i}
+ 	echo "Workunit ${AFVS_WORKUNIT}:${AFVS_WORKUNIT_SUBJOB}: output in {{batch_workunit_base}}/${AFVS_WORKUNIT_SUBJOB}.out"
+ 	date +%s > {{batch_workunit_base}}/${AFVS_WORKUNIT_SUBJOB}.start
+-	./templates/afvs_run.py &> {{batch_workunit_base}}/${AFVS_WORKUNIT_SUBJOB}.out
++	./templates/afvs_run.py &> {{batch_workunit_base}}/${AFVS_WORKUNIT_SUBJOB}.out || exit $?
+ 	date +%s > {{batch_workunit_base}}/${AFVS_WORKUNIT_SUBJOB}.end
+ done

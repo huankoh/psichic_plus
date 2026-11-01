@@ -1,1 +1,3 @@
 psichic-ligand/src/psichic_ligand/normalization/papyrus_structure_pipeline/* whitespace=cr-at-eol
+
+psichic_plus_adaptive/patches/*.patch -whitespace

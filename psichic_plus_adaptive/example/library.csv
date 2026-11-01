@@ -1,0 +1,7 @@
+collection_id,molecule_id,tranche,smiles
+001,0001,alpha,CC(=O)Oc1ccccc1C(=O)O
+001,0002,alpha,Cn1c(=O)c2c(ncn2C)n(C)c1=O
+001,0003,alpha,CC(=O)Nc1ccc(O)cc1
+002,0001,beta,C1CCCCCCC1
+002,0002,beta,invalid-smiles
+002,0003,beta,CC(C)Cc1ccc(cc1)[C@@H](C)C(=O)O

@@ -86,3 +86,5 @@ The code builds on [PSICHIC](https://github.com/huankoh/PSICHIC).
 The previous PSICHIC model has a [web demo](https://www.psichicwebserver.com).
 Vendored Papyrus 0.0.5 and ChEMBL Structure Pipeline 1.2.4 code, their MIT licenses, and the adapted RDKit BSD notice are retained in [psichic-ligand/NOTICE](psichic-ligand/NOTICE) and its referenced files.
 This public alpha is available for non-commercial research and evaluation under [LICENSE](LICENSE).
+
+For adaptive collection screening, see the optional [AdaptiveFlow adapter](psichic_plus_adaptive/README.md).

@@ -1,0 +1,6 @@
+**
+!LICENSE
+!psichic_plus_adaptive/
+!psichic_plus_adaptive/**
+**/__pycache__/
+**/*.pyc
