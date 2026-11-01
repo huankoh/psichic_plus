@@ -50,7 +50,6 @@ program_timeout=600
 print_attrs_in_summary=smi,psichic_affinity
 summary_formats=parquet,csv.gz
 run_atom_check=0
-run_fast_check=0
 dynamic_tranche_filtering=0
 ```
 

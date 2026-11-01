@@ -94,7 +94,7 @@ def validate_preparation(config):
             continue
         if config['ligand_library_format'] != 'smi':
             raise ValueError("psichic_plus requires native per-ligand .smi archives")
-        for key in ('run_atom_check', 'run_fast_check', 'dynamic_tranche_filtering'):
+        for key in ('run_atom_check', 'dynamic_tranche_filtering'):
             if int(config.get(key, 0)):
                 raise ValueError(f"psichic_plus requires {key}=0 for SMILES inputs")
         for key in ('threads_per_docking', 'program_timeout'):
