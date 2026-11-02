@@ -20,13 +20,11 @@ USER root
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 COPY psichic_plus_synthemol/requirements.txt psichic_plus_synthemol/constraints.txt /tmp/synthemol/
 COPY psichic_plus_adaptive/requirements.txt /tmp/adaptive-requirements.txt
+COPY psichic_plus_synthemol/__init__.py psichic_plus_synthemol/install.py /tmp/synthemol/psichic_plus_synthemol/
+COPY psichic_plus_synthemol/patches/synthemol-6030233.patch /tmp/synthemol/psichic_plus_synthemol/patches/
 RUN python -m pip install --no-cache-dir -c /tmp/synthemol/constraints.txt \
     -r /tmp/synthemol/requirements.txt -r /tmp/adaptive-requirements.txt \
-    && git clone https://github.com/swansonk14/SyntheMol.git /tmp/synthemol-source \
-    && git -C /tmp/synthemol-source checkout --detach 60302339148339355fc3e568ce200ed06207f99c \
-    && rm -rf /tmp/synthemol-source/synthemol/resources \
-    && python -m pip install --no-cache-dir --no-deps /tmp/synthemol-source \
-    && rm -rf /tmp/synthemol-source \
+    && PYTHONPATH=/tmp/synthemol python -m psichic_plus_synthemol.install \
     && python -m pip check \
     && python -m psichic_ligand verify
 RUN git clone https://github.com/QuantumAI4Bio/AdaptiveFlow-VS.git /opt/AdaptiveFlow-VS \

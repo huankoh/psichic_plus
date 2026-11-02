@@ -4,7 +4,9 @@ The shared image contains the existing PSICHIC+ screening runtime, SyntheMol gen
 The default build uses `environment_cpu.yml` and preserves its Python 3.12, RDKit 2024.03.3, PyTorch 2.6.0, and PyG 2.7.0 pins.
 It builds and verifies the native ligand package against RDKit in the same conda prefix.
 The image contains the two-molecule open SyntheMol fixture, with no model weights or user catalogues.
-The build removes SyntheMol's bundled catalogue resources before installing its pinned source with `--no-deps`.
+The build uses the same revision-pinned, digest-checked patch installer as the host workflow.
+It removes SyntheMol's bundled catalogue resources before installing with `--no-deps`.
+The native launcher retains all upstream options, with the limits recorded in the [fidelity table](../psichic_plus_synthemol/VERIFICATION.md).
 
 ## Build the image
 
