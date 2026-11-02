@@ -23,7 +23,10 @@ To extend an existing authorized CUDA screening image, supply its tag as `--buil
 That base must provide the existing screening modules at `/opt/min-psichic_plus`, their dependencies, Bash, Git, and `/usr/bin/tini`.
 The shared image adds both adapters and compatible upstream dependencies under constraints.
 It does not install SyntheMol's older environment pins.
-CUDA execution requires the matching driver and remains unverified in this implementation environment.
+CUDA execution requires a matching driver.
+A100 testing passed SyntheMol; AdaptiveFlow completed its stages but failed the direct-score tolerance check twice.
+See the [GPU results and unresolved reproducibility issue](../psichic_plus_synthemol/VERIFICATION.md#a100-and-a40-checks).
+An existing CUDA base can contain model weights in inherited layers; excluding new weight copies does not make that derived image weights-free.
 
 ## Verify SyntheMol generation
 

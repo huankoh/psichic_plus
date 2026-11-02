@@ -29,7 +29,7 @@ A separate worker reran the real workflows and native parity checks as recorded 
 | Replication | Baseline and patched `replicate_mcts` CLI | Preserved integer/string map-key mismatch raises `KeyError`; `replicate_rl` not independently exercised |
 | Mixed-objective search | Native baseline comparison and source inspection | Upstream adds scalar property rewards to every accumulator component; output parity does not establish correct per-objective exploitation |
 | W&B, wavelength, solvents, pretrained RL and other score models, custom reaction space, extended RL evaluation | Signature and flag parity only | Exposed, runtime behavior unverified |
-| CUDA | Native device forwarding fixture only | No GPU runtime verification |
+| CUDA | A100 real SyntheMol and AdaptiveFlow workflows, plus same-input repeated inference | SyntheMol passed once; AdaptiveFlow completed but exceeded direct-score tolerance twice; see GPU results below |
 | Default catalogue paths | Resource directory removed before wheel installation | Users must supply authorized CSV and map files |
 
 ## Repeat host verification
@@ -131,3 +131,44 @@ See `runs/parity-independent/cross-environment-affinities.json`, `host-rl-verifi
 The independently tested image predates final README and verification-record edits.
 A documentation-only rebuild refreshes those bundled files without changing the reviewed runtime code or upstream patch.
 Its build and file comparison are recorded under `runs/parity-independent`.
+
+## A100 and A40 checks
+
+GPU verification tested commit `bbf0b66aa4eacf6c52f300179b376bac536a780a` on an NVIDIA A100-PCIE-40GB.
+The host driver was `550.90.07`.
+The container used PyTorch `2.6.0+cu124`, CUDA `12.4`, PyG `2.7.0`, torch-scatter `2.1.2+pt26cu124`, and RDKit `2024.03.3`.
+Forward hooks confirmed that the model, ligand inputs, and protein inputs were on `cuda:0`.
+A source audit found no mismatches against the tested commit, and the rebuilt native ligand package passed all 2,242 contract cases.
+
+SyntheMol preparation and separate REAL, WuXi, and combined generation passed its CUDA verifier once.
+Five direct-inference comparisons had maximum absolute difference `4.76837158203125e-06`, below the existing `1e-5` threshold.
+The checked routes were preserved and the undersized ligand was visibly rejected.
+
+AdaptiveFlow completed prescreen and primary screening in two unchanged CUDA runs, but both verifiers failed their score-comparison assertion.
+For `C1CCCCCCC1`, differences from direct inference were `2.002716064453125e-05` and `4.1484832763671875e-05`, exceeding `1e-5`.
+Independent output checks passed for the selected work list, ranking, and failure details.
+This is not a full AdaptiveFlow CUDA verification pass.
+The tolerance was not relaxed and no scores or search behavior were changed.
+
+Ten calls to the same evaluation-mode model with byte-identical tensor inputs produced scores spanning `5.1975250244140625e-05`.
+This demonstrates repeated-inference variation in that CUDA runtime.
+The responsible operation was not identified, and CUDA reproducibility remains unresolved.
+
+The shared CUDA image was `sha256:1a0e08743d9b849bf89ce64a76b19cbf300825edf796fbc94280e4bb1faabc24`.
+It extended a pre-existing authorized CUDA base after refreshing its screening code and rebuilding the native package to match the tested commit.
+The original base already contained weights in an inherited layer.
+No new external weights were added, but this derived image is not a weights-free distributable image.
+Authorized test weights and ESM cache were mounted read-only.
+The repository's CUDA environment library path was applied after reproducing an initial RDKit import-order failure in the old base.
+No tracked runtime code was changed for the GPU tests.
+
+The A40 server passed a read-only CUDA tensor smoke test.
+Its main data filesystem had only 925 MB free, so neither full workflow nor a large image transfer was attempted there.
+A40 workflow verification remains pending.
+
+All local GPU artifacts are under `runs/gpu-verification/a100-bbf0b66-xAzrhM4J`.
+`report.md` links the environment and source audits, exact build and run scripts, original failing verifier logs, and repeated-input diagnostic.
+`outputs/synthemol/verification.json` is the SyntheMol verifier's own successful result.
+`outputs/adaptive-independent-verification.json` and `outputs/adaptive-repeat-independent-verification.json` summarize outputs from the failed AdaptiveFlow verifiers.
+`outputs/identical-input-diagnostic.json` records the ten identical-input predictions.
+These results supersede the earlier absence of CUDA runtime evidence, without changing the CPU verdicts.
