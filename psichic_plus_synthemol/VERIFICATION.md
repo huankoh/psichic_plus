@@ -1,197 +1,100 @@
-# SyntheMol and shared-image verification
+# Native SyntheMol fidelity verification
 
-Implementation started at `3305eb664f31aeaf7ccb6bc0b7b17f4956a31aa1` on `feat/synthemol-workflows`.
-The checkout was `/Users/huanyeekoh/.t3/scratch/2026-11-01-t3-pstack-science-poteto-mode-a9c6cba2`.
-The previous SyntheMol draft was inspected without changes.
-The reference checkout's tracked source remains clean.
-The host wheel installation refreshed its pre-existing ignored `synthemol.egg-info` metadata, contrary to the instruction to leave that checkout untouched.
-No generated upstream metadata was manually restored because its original contents and timestamps were not recorded.
-The existing `psichic_plus_adaptive.predictor.Predictor` was reused without changes.
-No PR or push was performed.
+This record supersedes the earlier verification descriptions on this branch.
+Those descriptions validated a reduced wrapper that filtered reactions with empty slots and used a separate score-vector wrapper.
+They do not establish native launcher parity.
+The current implementation deletes that wrapper and uses the pinned upstream launcher with a scalar scorer-factory extension.
+No upstream search correctness fixes are included.
+The parent owns the fresh independent review after this implementation handback.
 
-## Repeat the host checks
+## Fidelity and limits
 
-The following paths name the actual environment, weights, and cache used during implementation.
-Use a new output directory when repeating a verifier.
+| Control or behavior | Executed evidence | Result or limit |
+| --- | --- | --- |
+| Every original `generate` parameter, annotation, default, and CLI flag | AST signature comparison and real `--help` against a temporary clone of revision `6030233` | Preserved, including underscore names and `n_rollout=10`; only three optional PSICHIC parameters added |
+| MCTS, REAL, WuXi, and combined spaces | Native CLI tests and real model verifier | Separate and combined runs succeed; identical SMILES can retain one upstream route |
+| Custom ID, SMILES, and score columns | Native CLI with leading-zero IDs and renamed columns | IDs and route columns preserved |
+| `save_frequency`, `store_nodes`, verbose output, local logging, and stats | Two one-rollout chunks, `logs.pkl`, `generation_stats.csv`, and native CSV | Executed through the full launcher |
+| PSICHIC preparation and product affinity | Real weights, batch size one, direct screening CLI comparison | Five host comparisons have maximum absolute difference `0.0` |
+| Precomputed vectors, exact-SMILES cache, and lazy initialization | Native `MoleculeScorer` with a predictor boundary fixture | Supplied vectors win; cached molecules trigger no prediction; predictor initializes once on an uncached call |
+| Signs, base weights, and score composition | Native CLI single-score negative sign and native mixed-score scorer with reweighting | No adapter vector or weight wrapper |
+| Intermediate-only reaction | Actual native CLI with REAL 22 followed by 7_2 | Two-step product retained despite empty slot zero in 7_2; second route step uses intermediate ID `-1` |
+| Seeded native parity | Baseline and installed launcher CSV bytes and non-time stats | MCTS, two-step generation, explicit regression RL, and mixed-score baseline comparisons |
+| PSICHIC factory parity | Installed PSICHIC CLI with an explicit descriptor predictor fixture versus original native descriptor scorer | Same seeded two-step CSV; fixture scores are descriptors, not claimed binding affinities |
+| Regression RL | Explicit `mlp`, `rdkit`, `regression`, one training epoch per rollout | Baseline comparison and real PSICHIC host run; no claim for other RL combinations |
+| Dead ends from incomplete routes | Actual CLI against original and patched package | Same native failure with and without another complete route; no filtering, retry, skip, or fallback |
+| `qed` | Baseline and patched CLI | Preserved upstream factory fallthrough raises `ValueError` |
+| Default RL fingerprint | Baseline and patched CLI | Preserved `FEATURES_SIZE_MAPPING[None]` raises `KeyError` |
+| Replication | Baseline and patched `replicate_mcts` CLI | Preserved integer/string map-key mismatch raises `KeyError`; `replicate_rl` not independently exercised |
+| Mixed-objective search | Native baseline comparison and source inspection | Upstream adds scalar property rewards to every accumulator component; output parity does not establish correct per-objective exploitation |
+| W&B, wavelength, solvents, pretrained RL and other score models, custom reaction space, extended RL evaluation | Signature and flag parity only | Exposed, runtime behavior unverified |
+| CUDA | Native device forwarding fixture only | No GPU runtime verification |
+| Default catalogue paths | Resource directory removed before wheel installation | Users must supply authorized CSV and map files |
+
+## Repeat host verification
+
+Commands run from the repository root use an existing verified environment, authorized model weights, and ESM cache.
+Set the paths for your machine.
+Use new run paths when repeating these commands.
+The reference source is read only.
+The installer and baseline tests clone temporary copies instead of installing from that reference.
 
 ```bash
-synthemol_repo=/Users/huanyeekoh/.t3/scratch/2026-11-01-t3-pstack-science-poteto-mode-a9c6cba2
-synthemol_old=/Users/huanyeekoh/.t3/scratch/2026-10-27-https-github-com-huankoh-psichic-7a152a8a
-synthemol_python="$synthemol_old/work-scratch/fresh-env/bin/python"
-synthemol_weights="$synthemol_old/work-impl/psichic_plus_screening/pretrained_weights/PSICHIC_plus"
-export TORCH_HOME="$synthemol_old/work-scratch/torch"
-export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
-cd "$synthemol_repo"
-"$synthemol_python" -m pip install -c psichic_plus_synthemol/constraints.txt -r psichic_plus_synthemol/requirements.txt
-"$synthemol_python" -m pip install --no-deps "$synthemol_old/refs/synthemol"
-"$synthemol_python" -m pip check
-"$synthemol_python" -m psichic_plus_synthemol.example.verify \
-  --model-dir "$synthemol_weights" --output runs/synthemol-host --device cpu
-AFVS_UPSTREAM="$synthemol_old/refs/af-vs" \
-  "$synthemol_python" -m pytest tests psichic_plus_screening/tests psichic-ligand/tests -q
-"$synthemol_python" -m pytest tests/test_synthemol.py -q
-PSICHIC_E2E=1 "$synthemol_python" -m pytest tests/test_root_e2e.py -q
+old=/Users/huanyeekoh/.t3/scratch/2026-10-27-https-github-com-huankoh-psichic-7a152a8a
+python="$old/work-scratch/fresh-env/bin/python"
+weights="$old/work-impl/psichic_plus_screening/pretrained_weights/PSICHIC_plus"
+export TORCH_HOME="$old/work-scratch/torch" OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
+"$python" -m psichic_plus_synthemol.install --source "$old/refs/synthemol"
+"$python" -m pip check
+"$python" -m psichic_plus_synthemol.example.verify \
+  --model-dir "$weights" --output runs/parity-implementation/host-real --device cpu
+SYNTHEMOL_SOURCE="$old/refs/synthemol" AFVS_UPSTREAM="$old/refs/af-vs" \
+  "$python" -m pytest tests psichic_plus_screening/tests psichic-ligand/tests -q \
+  --basetemp runs/parity-implementation/pytest-final
 ruff check psichic_plus_synthemol tests/test_synthemol.py --ignore E402
-"$synthemol_python" -m compileall -q psichic_plus_synthemol
+"$python" -m compileall -q psichic_plus_synthemol
 git diff --check
 ```
 
-The supplied SyntheMol reference checkout was at `60302339148339355fc3e568ce200ed06207f99c`.
-The supplied AdaptiveFlow reference checkout was at `df74e005e456e94654fa93a40d748de399450b81`.
-The host environment gained only the additional adapter dependencies.
-`pip check` reported no broken requirements.
-The stack retained Python 3.12, NumPy 1.26.4, pandas 2.2.2, SciPy 1.13.1, RDKit 2024.03.3, PyTorch 2.6.0, and PyG 2.7.0.
+The final full regression passed 485 tests, with three opt-in root E2E tests skipped.
+Running those three tests separately with `PSICHIC_E2E=1` passed with real weights.
+Ruff, compilation, `pip check`, and `git diff --check` passed.
+The installer rejected a changed patch digest before attempting to access the source.
+The actual CLI rejected an unprepared CSV with the same missing-score-column contract as upstream.
+The reference checkout's tracked source remained clean.
 
-The real host verifier generated one product through REAL reaction 22 and one through WuXi reaction 1.
-Both routes produced `CN(C(=O)c1ccccc1)c1ccccc1` and retained building-block IDs `0001` and `0002`.
-The affinity was `1.6210767030715942` in both host runs.
-Both predictions matched the unmodified direct screening CLI with maximum absolute difference `0.0` at batch size one.
-The scorer rejected `C` with stage `ligand_standardization` and reason `NON_SMALL_MOLECULE: Molecular weight outside allowed range`.
+The real host verifier produced `CN(C(=O)c1ccccc1)c1ccccc1` in all three generation runs.
+Preparation retained IDs `0001` and `0002` and raw affinities `3.6013894081115723` and `4.581860542297363`.
+Product raw affinity was `1.6210767030715942`.
+The real PSICHIC regression RL run trained after each rollout and generated the same product with zero difference from direct inference.
+Its command and result are in `run-host-rl.sh` and `host-rl/verification.json` under the artifact directory.
+The predictor rejected `C` with stage `ligand_standardization` and reason `NON_SMALL_MOLECULE: Molecular weight outside allowed range`.
+Artifacts reside under `runs/parity-implementation`, including commands, logs, CSVs, and JSON summaries.
+The decision trail continues in `runs/implementation/decisions.tsv`.
 
-The regression run passed 481 tests and skipped three opt-in root E2E tests.
-The final SyntheMol suite passed 27 tests after adding one more empty-result error case.
-The three opt-in root CLI E2E tests then passed with the real pretrained model and existing ESM cache.
-The behavior test changed the favored building block and observed the corresponding change in the branch visited by the actual upstream MCTS generator.
-Ruff passed with E402 excluded for pytest's dependency-gated imports.
-Compilation and whitespace checks passed.
+## Repeat Docker verification
 
-## Build the shared image
-
-Docker Desktop reported server version `29.2.0` on an arm64 host.
-There were no existing images to reuse.
-The image targets `linux/amd64` under emulation because the native ligand package's verified platforms exclude Linux arm64.
-The existing native platform and RDKit provenance guards remain enabled.
-
-The first attempt waited on Docker Desktop's credential helper while resolving the public Dockerfile frontend.
-The retry used a temporary unauthenticated configuration for public image pulls.
-The user's Docker configuration was left unchanged.
-The temporary configuration includes the Docker Desktop CLI plugin directory so BuildKit remains available.
+The shared Dockerfile uses the same checked patch installer and excludes licensed catalogue resources and weights.
+AdaptiveFlow-VS remains unchanged at `df74e005e456e94654fa93a40d748de399450b81` under `/opt/AdaptiveFlow-VS`.
+The image targets CPU `linux/amd64` on the arm64 host to preserve the native ligand platform contract.
+The public Docker configuration avoids the credential helper without changing the user's configuration.
 
 ```bash
-mkdir -p runs/implementation/docker-config
-cat > runs/implementation/docker-config/config.json <<'EOF'
-{"auths":{},"cliPluginsExtraDirs":["/Applications/Docker.app/Contents/Resources/cli-plugins"]}
-EOF
 docker --config "$PWD/runs/implementation/docker-config" \
   --host unix:///Users/huanyeekoh/.docker/run/docker.sock \
   build --platform linux/amd64 --progress=plain \
-  -f psichic_plus_workflows/Dockerfile -t psichic-workflows:local .
+  -f psichic_plus_workflows/Dockerfile -t psichic-workflows:parity .
+bash runs/parity-implementation/run-containers.sh
 ```
 
-The final Dockerfile removes SyntheMol's bundled catalogue resources before installing its pinned source with `--no-deps`.
-The build context excludes weights and generated run directories.
-Only the two-molecule open fixture is included.
-The existing GPU screening Docker ignore file also excludes `pretrained_weights/`.
-The built image is `psichic-workflows:local`, with ID `sha256:390c49ac0e100a4de9f1976f9f16342a1f7b67ee4b0d5803b671544425453dcd`.
-The build passed native ligand verification before and after installing the workflow dependencies.
-Runtime inspection confirmed RDKit 2024.03.3 loads beneath `/opt/conda/envs/psichic_fp`, the Python interpreter's own prefix.
-It also confirmed PyTorch `2.6.0+cpu`, no CUDA device, no installed SyntheMol resource directory, and the retained upstream MIT license.
+The container script mounts only weights, the ESM cache, and writable run artifacts.
+Both workflow modules run from the rebuilt image, serially, without host source mounts.
+See `runs/parity-implementation/docker-build.log`, `container-synthemol.log`, `container-adaptive.log`, and the per-workflow `verification.json` records.
 
-## Run the real workflows inside the image
-
-These commands used the weights, ESM cache, and upstream checkout from the host checks as read-only mounts.
-The adapters ran from the built image, with no source-code bind mount.
-
-```bash
-mkdir -p runs/shared-image
-docker run --rm --platform linux/amd64 --shm-size=4g --name psichic-synthemol-verification \
-  -e TORCH_HOME=/torch \
-  -v "$synthemol_weights:/weights:ro" \
-  -v "$synthemol_old/work-scratch/torch:/torch:ro" \
-  -v "$PWD/runs/shared-image:/runs" \
-  psichic-workflows:local python -m psichic_plus_synthemol.example.verify \
-  --model-dir /weights --output /runs/synthemol --device cpu
-docker run --rm --platform linux/amd64 --shm-size=4g --name psichic-adaptive-verification \
-  -e TORCH_HOME=/torch \
-  -v "$synthemol_weights:/weights:ro" \
-  -v "$synthemol_old/work-scratch/torch:/torch:ro" \
-  -v "$synthemol_old/refs/af-vs:/upstream:ro" \
-  -v "$PWD/runs/shared-image:/runs" \
-  psichic-workflows:local python -m psichic_plus_adaptive.example.verify \
-  --upstream /upstream --model-dir /weights --output /runs/adaptive --device cpu
-```
-
-The SyntheMol verifier passed inside the image for both chemical spaces.
-Each space generated one amide with the expected route and leading-zero building-block IDs.
-Both affinities matched direct inference with maximum absolute difference `0.0`.
-The real scorer rejected the undersized ligand with the same stage and reason as on the host.
-
-The existing AdaptiveFlow verifier also passed in the same image.
-Its five successful stage predictions matched direct inference with maximum absolute difference `0.0` at batch size one.
-The direct run recorded five successes and one invalid-SMILES failure.
-The upstream selector chose tranche beta and its whole three-molecule collection for a primary target of two.
-The final ranking contained two predictions, and the generated primary todo remained byte-identical to the executed todo.
-
-CUDA execution and a CUDA-based shared-image build were not tested because this machine has no CUDA device.
-Large licensed catalogues and large search budgets were not exercised.
-The open fixture establishes the integration behavior for these two small routes.
-
-## Evidence files
-
-All paths below are relative to the implementation checkout.
-Run outputs and the decision trail remain local under the ignored `runs/` directory.
-
-| Evidence | Path |
-| --- | --- |
-| Host dependency installation | `runs/implementation/host-install.log` |
-| Host generation and direct comparison | `runs/synthemol-host/verification.json` |
-| Generated host routes | `runs/synthemol-host/{real,wuxi}/molecules.csv` |
-| Exact host subprocess commands | `runs/synthemol-host/commands.json` |
-| Full regression | `runs/implementation/regression.log` |
-| Final SyntheMol behavior tests | `runs/implementation/synthemol-tests-final.log` |
-| Opt-in root CLI E2E tests | `runs/implementation/root-e2e.log` |
-| Lint | `runs/implementation/lint.log` |
-| Final Docker build | `runs/implementation/docker-build-final.log` |
-| Image package and provenance inspection | `runs/implementation/docker-runtime.json` |
-| Container SyntheMol verification | `runs/shared-image/synthemol/verification.json` |
-| Container SyntheMol commands | `runs/shared-image/synthemol/commands.json` |
-| Container SyntheMol log | `runs/implementation/docker-synthemol.log` |
-| Container AdaptiveFlow verification | `runs/shared-image/adaptive/verification.json` |
-| Container AdaptiveFlow log | `runs/implementation/docker-adaptive.log` |
-| Local decisions | `runs/implementation/decisions.tsv` |
-| Reference checkout audit | `runs/implementation/upstream-status.txt` |
-
-Independent code review and a fresh runtime check belong to the parent task.
-This implementation child spawned no subagents.
-
-## Independent review and fixes
-
-The independent panel found three issues in the first implementation.
-The fixes exclude reactions with any empty slot before constructing the upstream generator, reject catalogue ID `-1` reserved for intermediates, and bundle the pinned AdaptiveFlow-VS checkout in the image.
-Two new behavior tests reproduced the catalogue issues before the fix in `runs/independent/review-reproductions.log`.
-After the fix, all 29 focused tests passed in `runs/independent/review-fixes-tests.log`.
-The partial-route regression runs upstream MCTS with both one- and two-reaction budgets.
-
-An earlier independent run at `4439949` passed both SyntheMol spaces and AdaptiveFlow serially with zero prediction differences.
-Its first concurrent AdaptiveFlow run had a worker terminated by signal 9 and reported incomplete output.
-The cause was not proven.
-Fresh serial output is under `runs/independent/adaptive/serial`.
-Core dependencies are pinned, but ranged auxiliary dependencies and the tagged base mean future builds are not fully locked.
-
-## Final independent image verification
-
-A fresh verification worker rebuilt commit `7731c6845341124f0f1c6f1e1f1b217832e0b890` as `psichic-workflows:final` for `linux/amd64`.
-The final image ID is `sha256:b371dc5c28b3ea14ab6ecfec1f6e8f13ffdd9afe3e50b254c6f57941391834a9`.
-The build log is `runs/final-independent/build.log`.
-The exact serial container commands and mounts are recorded in `runs/final-independent/run-verifiers.sh`.
-
-Both SyntheMol chemical spaces passed generation and provenance checks in the final image.
-Each predicted affinity was `1.6210296154022217`, with maximum absolute difference `0.0` against direct inference in the same image.
-The undersized ligand rejection remained visible.
-See `runs/final-independent/synthemol/verification.json`.
-The CPU container value differs slightly from the earlier host value, so exact equality is asserted only against direct inference in the same runtime.
-
-AdaptiveFlow passed using `/opt/AdaptiveFlow-VS` bundled in the image, without any host upstream source mount.
-Its five stage predictions matched direct inference with maximum absolute difference `0.0`.
-Its invalid-SMILES, selection, ranking, and todo-preservation checks passed.
-See `runs/final-independent/adaptive/verification.json`.
-
-All 29 focused tests passed, including the two review regressions.
-The broader regression passed 484 tests with three opt-in skips and 13 warnings.
-Those root CLI opt-in tests had passed separately before the review fixes, as recorded above.
-See `runs/final-independent/focused.log` and `runs/final-independent/regression.log`.
-
-Image inspection confirmed both upstream workflows and their license texts, matching runtime source, and no copied model weights.
-Only the two open example reaction maps were present in the inspected workflow directories.
-See `runs/final-independent/source-diff.log` and `runs/final-independent/image-inspection.log`.
-CUDA and large-catalogue limitations still apply.
+The tested image is `psichic-workflows:parity`, with ID `sha256:2d0a9262b2fceb13db624a71a91ac8960a90b1c4d39ba86967989efba8bbc060`.
+Both real workflow verifiers completed serially from this image.
+SyntheMol completed five affinity comparisons with maximum absolute difference `4.440892098500626e-16`.
+AdaptiveFlow completed five comparisons with maximum absolute difference `0.0`, preserved failed-ligand reporting, and retained the selected work list.
+Runtime inspection confirmed no installed SyntheMol resource directory, a retained MIT license file, no broken requirements, and a clean AdaptiveFlow checkout at the pinned revision.
+The image contains the runtime code tested here.
+This final verification record was updated on the host after those executions.
