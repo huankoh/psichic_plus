@@ -292,7 +292,7 @@ class Scorer:
             process.wait(timeout=0.2)
         except subprocess.TimeoutExpired:
             pass
-        for sig in (signal.SIGTERM, signal.SIGKILL):
+        for sig, reap_timeout in ((signal.SIGTERM, 0.5), (signal.SIGKILL, 5.0)):
             try:
                 os.killpg(process.pid, sig)
             except OSError as error:
@@ -302,7 +302,7 @@ class Scorer:
                         f"Cannot terminate inference child {process.pid}: {error}; respawn disabled"
                     ) from error
             try:
-                process.wait(timeout=0.5)
+                process.wait(timeout=reap_timeout)
             except subprocess.TimeoutExpired:
                 pass
         if process.poll() is not None:
