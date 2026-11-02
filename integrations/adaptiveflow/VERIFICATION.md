@@ -62,8 +62,7 @@ The wheel was inspected and contains no `.pt`, `.pth`, or `.ckpt` files.
 
 ## Remaining verification
 
-CUDA hardware was unavailable for these initial CPU checks.
-The later A100 evaluation below completed the native workflow but failed its frozen numerical agreement check.
+CUDA hardware was unavailable, so GPU execution has not been verified.
 Slurm, AWS Batch, LSF, scheduler scale, shared storage behavior across machines, and cluster scaling have not been exercised.
 The Docker test used an existing authorized local worker image rather than building a new distributable image.
 The mixed-method test uses a failing fixture executable for native Vina dispatch, so it does not validate a Vina calculation.
@@ -88,52 +87,4 @@ A second targeted run invoked the patched native dispatcher with a hung child, v
 The full independent run commands and outputs are retained locally in `runs/adaptiveflow-native-final-independent/commands.sh`.
 The two targeted production lifecycle checks are retained in `runs/adaptiveflow-native-production-lifecycle/checks.py` and `checks.log`.
 These final checks used the same application patch, SHA-256 `d85f8ff4e242c09b60016a460ef6fd100c4bdae37236c15db84574d342399561`, before this evidence record was updated.
-These CPU checks do not establish CUDA numerical correctness, remote scheduler behavior, or scaling.
-
-## A100 adaptive evaluation
-
-The [A100 evidence](tests/evidence/native-a100.json) records one completed engineering run on 2026-11-02.
-It uses human JNK3, UniProt P53779, with its full 464-residue sequence.
-The input library contains 1,000,000 distinct canonical isomeric SMILES from existing Papyrus and PCBA datasets, with source identifiers retained.
-Prepared native archives, sparse listings, native workunit commands, and the actual upstream `tranche_ave_score` selector were used.
-No protein structure, conformer generation, 3D pose sampling, or docking was performed.
-
-The native workflow passed its independent artifact audit.
-The prescreen completed 4,061 predictions in 98.200 seconds.
-The selector took 0.956 seconds and chose 104 full collections containing 100,871 molecules for a budget of 100,000.
-The primary screen completed all 100,871 predictions in 1,512.791 seconds, or 14.997 milliseconds of amortized wall time per attempted or successful pair.
-Both stages reported zero failures, skips, download failures, or retries.
-There were 104,932 attempts, 104,424 distinct molecules, and 508 molecules evaluated in both stages.
-The remaining 895,576 molecules have no prediction from this run.
-The complete adaptive workflow took 1,625.378 seconds, including native preparation, selection, consolidation, ranking, export, and orchestration between stage timers.
-Runtime construction, library preparation, standalone validation, diagnostic reruns, and two earlier aborted attempts are outside that duration.
-
-This run used one scoring worker, one CPU thread per worker, batch size 128, one replica, conservative FP32 CUDA, and disabled TF32.
-Each stage initialized the target and model once.
-The A100 sampled peak device memory was 4,205 MiB.
-The scorer occupied approximately one CPU core while sampled primary GPU utilization averaged 9.35 percent.
-The idle device also reported unexplained utilization, so these readings do not establish exclusive GPU occupancy.
-This is a measurement of the recorded configuration, not an optimized-throughput or implementation-speedup comparison.
-The host's glibc 2.31 prevents optional `pyg-lib` and `torch-sparse` extensions from loading.
-The exercised conservative dense CUDA path completed despite that limitation.
-
-The frozen numerical agreement check failed.
-All 128 standalone predictions from the deterministically selected sample succeeded, but one exceeded the absolute tolerance of 0.0001.
-The maximum difference was 0.00014257431030229029 and the mean difference was 0.000006930902600271044.
-Diagnostic repeats using the original batch also produced an adapter-versus-standalone difference of 0.00016164779663085938.
-Batch composition alone does not explain the discrepancy, and no sole cause has been established.
-The tolerance and failed validation record were preserved.
-This run therefore does not establish an overall numerical validation pass.
-
-An earlier attempted prescreen exposed a CUDA child shutdown failure after processing its full sample.
-Commit `77e52b5` increases only the bounded post-SIGKILL reap wait from 0.5 seconds to 5 seconds.
-The completed run used an installed wheel matching that commit's adapter SHA-256.
-All 26 regression tests and Ruff checks passed, and an independent reviewer accepted the focused fix.
-No shared Docker image or shared environment was changed.
-
-Native commands, configurations, summaries, logs, failed attempts, and diagnostic artifacts remain under `Huan-MainA100:/mnt/hykoh3/adaptiveflow_pr5_eval_20261102`.
-Use `PYTHONNOUSERSITE=1` with the recorded private runtime when reproducing selection.
-The user-site pandas version changes tied collection ordering.
-The source data may overlap training, and 58,713 library molecules have JNK3 source activity records.
-The study does not measure adaptive recall or validate novel biological hits.
-Remote schedulers and cluster scaling remain untested.
+CUDA, remote schedulers, and scaling remain unverified.

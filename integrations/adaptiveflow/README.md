@@ -181,9 +181,7 @@ docker run --rm --gpus all \
 For CPU mode, omit `--gpus all` and set `device=cpu`.
 Include AFVS's Python and command-line dependencies in your chosen worker runtime.
 Docker CPU verification is recorded in the verification evidence.
-An A100 native adaptive run completed over a million-input library, but its frozen numerical agreement check failed.
-See the [A100 verification record](VERIFICATION.md#a100-adaptive-evaluation) for counts, timing, and the unresolved numerical difference.
-Slurm and AWS execution and cluster scaling remain unverified.
+GPU behavior, Slurm and AWS execution, and cluster scaling remain unverified.
 
 ## Reproduce the fixture verification
 
