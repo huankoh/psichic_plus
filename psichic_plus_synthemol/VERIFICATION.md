@@ -5,7 +5,8 @@ Those descriptions validated a reduced wrapper that filtered reactions with empt
 They do not establish native launcher parity.
 The current implementation deletes that wrapper and uses the pinned upstream launcher with a scalar scorer-factory extension.
 No upstream search correctness fixes are included.
-The parent owns the fresh independent review after this implementation handback.
+Two fresh code reviewers found no actionable issues in upstream fidelity.
+A separate worker reran the real workflows and native parity checks as recorded below.
 
 ## Fidelity and limits
 
@@ -98,3 +99,35 @@ AdaptiveFlow completed five comparisons with maximum absolute difference `0.0`, 
 Runtime inspection confirmed no installed SyntheMol resource directory, a retained MIT license file, no broken requirements, and a clean AdaptiveFlow checkout at the pinned revision.
 The image contains the runtime code tested here.
 This final verification record was updated on the host after those executions.
+
+## Independent fidelity review and runtime checks
+
+Review and runtime verification used commit `bdbb9228ec0a7bf4bb60256b4c0d424a4772bda2`.
+Both code reviewers found no actionable critical, warning, or nit findings.
+They confirmed all 43 original launcher parameters retain their annotations and defaults, with only three optional PSICHIC flags added.
+They found no unintended reaction pruning, input-validation changes, vector replacement, or change in precomputed-score precedence.
+The original and patched upstream packages differ only in the three extension files listed in the checked patch.
+
+A fresh worker passed all 31 focused tests and reran the real image workflows serially without host source mounts.
+SyntheMol completed separate REAL, WuXi, and combined runs with five direct-affinity comparisons and maximum absolute difference `4.440892098500626e-16`.
+AdaptiveFlow used bundled `/opt/AdaptiveFlow-VS`, passed five direct comparisons with zero difference, and preserved its selected work list.
+Explicit host MLP/RDKit regression RL and a same-host repeated-request check also passed.
+The independent worker did not repeat the full regression suite; the earlier logs support 485 regression passes and three separate real root E2E passes.
+Evidence is under `runs/parity-independent`, including `run-containers.sh`, `run-focused.sh`, `focused.log`, and each container's `verification.json`.
+
+The two-step fixture enables REAL `7_2` after reaction 22 even though its first catalogue slot is empty.
+Its intermediate retains ID `-1`.
+The unchanged upstream logger drops the sub-reaction suffix and writes reaction `7`, displayed as `7.0` in the CSV.
+Original and patched output CSVs are byte-identical, so preserving upstream output also preserves that loss of detail.
+See `runs/parity-independent/route-audit.json`.
+
+An exploratory comparison between host and image predictions exceeded an assumed `1e-5` tolerance.
+Absolute differences were `0.00021982192993164062` for the acid and `0.000047087669372558594` for the product.
+The cause was not isolated.
+That driver exited nonzero after its successful RL check; a separate comparison against direct inference in the same host environment passed.
+Affinity agreement claims therefore apply within the same runtime and do not imply exact equality across environments.
+See `runs/parity-independent/cross-environment-affinities.json`, `host-rl-verification.json`, and `real-repeat-host.json`.
+
+The independently tested image predates final README and verification-record edits.
+A documentation-only rebuild refreshes those bundled files without changing the reviewed runtime code or upstream patch.
+Its build and file comparison are recorded under `runs/parity-independent`.

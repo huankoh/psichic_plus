@@ -90,7 +90,8 @@ Read `molecules.csv`, `generation_stats.csv`, and `logs.pkl` in the save directo
 The native writer retains score names, node statistics, reaction IDs, chemical spaces, and building-block IDs for each step.
 An intermediate has building-block ID `-1`.
 Reserve that ID for intermediates in your catalogue.
-Upstream can format a reaction ID as `7.0` when some rows lack that reaction step.
+Upstream logs reaction `7_2` as `7`, and the CSV can display it as `7.0`.
+That native output loses the sub-reaction suffix; the adapter preserves this behavior.
 Identical products from different spaces share a native node and can retain only one route.
 
 ## Use native catalogue and failure behavior
