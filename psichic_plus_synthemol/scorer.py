@@ -1,35 +1,36 @@
 import math
-
-from synthemol.generate.score_weights import ScoreWeights
+from pathlib import Path
 
 from psichic_plus_adaptive import Failure, Success
 
 
 class PSICHICScorer:
-    num_scores = 1
+    """Return one raw affinity; SyntheMol owns score composition and caching."""
 
-    def __init__(self, predictor):
-        self.predictor = predictor
-        self.score_weights = ScoreWeights(
-            [1.0], immutable=True, score_names=["psichic_affinity"], score_signs=[1],
-        )
-        self.scores: dict[str, float] = {}
-
-    def compute_individual_scores(self, smiles: str) -> list[float]:
-        if smiles not in self.scores:
-            try:
-                results = self.predictor.score([(smiles, smiles)])
-            except Exception as error:
-                raise RuntimeError(f"SMILES {smiles!r}, stage prediction, reason {error}") from error
-            if len(results) != 1 or results[0].token != smiles:
-                raise RuntimeError(f"SMILES {smiles!r}, stage prediction, reason expected one matching result")
-            result = results[0]
-            if isinstance(result, Failure):
-                raise RuntimeError(f"SMILES {smiles!r}, stage {result.stage}, reason {result.reason}")
-            if not isinstance(result, Success) or not math.isfinite(result.raw_affinity):
-                raise RuntimeError(f"SMILES {smiles!r}, stage prediction, reason non-finite or invalid affinity")
-            self.scores[smiles] = result.raw_affinity
-        return [self.scores[smiles]]
+    def __init__(self, target_fasta: Path, model_dir: Path, device: str, cache_dir: Path):
+        self.target_fasta = target_fasta
+        self.model_dir = model_dir
+        self.device = device
+        self.cache_dir = cache_dir
+        self.predictor = None
 
     def __call__(self, smiles: str) -> float:
-        return self.compute_individual_scores(smiles)[0]
+        try:
+            if self.predictor is None:
+                from psichic_plus_adaptive.predictor import Predictor
+
+                self.predictor = Predictor(
+                    str(self.target_fasta), str(self.model_dir), self.device,
+                    str(self.cache_dir), batch_size=1,
+                )
+            results = self.predictor.score([(smiles, smiles)])
+        except Exception as error:
+            raise RuntimeError(f"SMILES {smiles!r}, stage prediction, reason {error}") from error
+        if len(results) != 1 or results[0].token != smiles:
+            raise RuntimeError(f"SMILES {smiles!r}, stage prediction, reason expected one matching result")
+        result = results[0]
+        if isinstance(result, Failure):
+            raise RuntimeError(f"SMILES {smiles!r}, stage {result.stage}, reason {result.reason}")
+        if not isinstance(result, Success) or not math.isfinite(result.raw_affinity):
+            raise RuntimeError(f"SMILES {smiles!r}, stage prediction, reason non-finite or invalid affinity")
+        return result.raw_affinity

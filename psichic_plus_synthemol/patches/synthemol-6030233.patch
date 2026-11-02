@@ -1,0 +1,103 @@
+diff --git a/synthemol/constants.py b/synthemol/constants.py
+index b4b142c..68731f7 100644
+--- a/synthemol/constants.py
++++ b/synthemol/constants.py
+@@ -34,7 +34,7 @@ MOLECULE_TYPE = str | Mol  # Either a SMILES string or an RDKit Mol object
+ SKLEARN_MODEL_TYPES = RandomForestClassifier | RandomForestRegressor
+ SKLEARN_MODEL_NAME_TYPES = Literal["random_forest"]
+ MODEL_TYPES = Literal["random_forest", "chemprop"]
+-SCORE_TYPES = Literal["random_forest", "chemprop", "qed", "clogp", "wavelength", "sp2_network"]
++SCORE_TYPES = Literal["random_forest", "chemprop", "qed", "clogp", "wavelength", "sp2_network", "psichic_plus"]
+ DATASET_TYPES = Literal["classification", "regression"]
+ RL_MODEL_TYPES = Literal["mlp", "chemprop"]
+ RL_PREDICTION_TYPES = Literal["classification", "regression"]
+diff --git a/synthemol/generate/generate.py b/synthemol/generate/generate.py
+index 09b9325..74961ac 100644
+--- a/synthemol/generate/generate.py
++++ b/synthemol/generate/generate.py
+@@ -82,6 +82,9 @@ def generate(
+     wandb_run_name: str | None = None,
+     wavelength_color: str | None = None, 
+     h2o_solvents: bool = False,
++    psichic_target_fasta: Path | None = None,
++    psichic_device: str | None = None,
++    psichic_cache_dir: Path | None = None,
+ ) -> None:
+     """Generate molecules combinatorially using a search guided by a molecular property predictor.
+ 
+@@ -151,6 +154,9 @@ def generate(
+     :param wandb_project_name: The name of the Weights & Biases project to log results to.
+     :param wandb_run_name: The name of the Weights & Biases run to log results to.
+     :param wavelength color: If generating fluorescent molecules, then specify a color to target a specific wavelength, otherwise the whole visible range is targeted if None.
++    :param psichic_target_fasta: Single-record target FASTA for psichic_plus scoring.
++    :param psichic_device: PSICHIC device override. Defaults to the device selected by use_gpu.
++    :param psichic_cache_dir: PSICHIC cache directory. Defaults to save_dir / "psichic_cache".
+     :param h2o_solvents: Whether to concatenate H2O solvent features with the molecule features during prediction.
+     """
+     # Convert score_model_paths to Path/None
+@@ -490,7 +496,10 @@ def generate(
+         h2o_solvents=h2o_solvents,
+         device=device,
+         smiles_to_scores=building_block_smiles_to_scores,
+-        wavelength_color = wavelength_color
++        wavelength_color = wavelength_color,
++        psichic_target_fasta=psichic_target_fasta,
++        psichic_device=psichic_device,
++        psichic_cache_dir=psichic_cache_dir if psichic_cache_dir is not None else save_dir / "psichic_cache",
+     )
+ 
+     # Set up RL model if applicable
+diff --git a/synthemol/generate/scorer.py b/synthemol/generate/scorer.py
+index 6ef9f10..75281e1 100644
+--- a/synthemol/generate/scorer.py
++++ b/synthemol/generate/scorer.py
+@@ -251,6 +251,9 @@ def create_scorer(
+     device: torch.device = torch.device("cpu"),
+     wavelength_color: WAVELENGTH_COLORS | None = None,
+     h2o_solvents: bool = False,
++    psichic_target_fasta: Path | None = None,
++    psichic_device: str | None = None,
++    psichic_cache_dir: Path | None = None,
+ ) -> Scorer:
+     """Creates a scorer object that scores a molecule.
+ 
+@@ -306,6 +309,19 @@ def create_scorer(
+         scorer = ChempropScorer(
+             model_path=model_path, fingerprint_type=fingerprint_type, device=device, h2o_solvents=h2o_solvents
+         )
++    elif score_type == "psichic_plus":
++        if model_path is None or psichic_target_fasta is None or psichic_cache_dir is None:
++            raise ValueError("PSICHIC+ requires a model path, target FASTA, and cache directory.")
++        if fingerprint_type is not None:
++            raise ValueError("PSICHIC+ does not use score fingerprints.")
++        from psichic_plus_synthemol.scorer import PSICHICScorer
++
++        scorer = PSICHICScorer(
++            target_fasta=psichic_target_fasta,
++            model_dir=model_path,
++            device=psichic_device if psichic_device is not None else str(device),
++            cache_dir=psichic_cache_dir,
++        )
+     elif score_type == "random_forest":
+         if model_path is None:
+             raise ValueError("Random forest requires a model path.")
+@@ -331,6 +347,9 @@ class MoleculeScorer:
+         device: torch.device = torch.device("cpu"),
+         smiles_to_scores: dict[str, list[float]] | None = None,
+         wavelength_color: str | None = None,
++        psichic_target_fasta: Path | None = None,
++        psichic_device: str | None = None,
++        psichic_cache_dir: Path | None = None,
+     ) -> None:
+         """Initialize the MoleculeScorer, which contains a collection of one or more individual scorers.
+ 
+@@ -370,6 +389,9 @@ class MoleculeScorer:
+                 device=device,
+                 wavelength_color=wavelength_color,
+                 h2o_solvents=h2o_solvents,
++                psichic_target_fasta=psichic_target_fasta,
++                psichic_device=psichic_device,
++                psichic_cache_dir=psichic_cache_dir,
+             )
+             for score_type, model_path, fingerprint_type in zip(
+                 score_types, model_paths, fingerprint_types
