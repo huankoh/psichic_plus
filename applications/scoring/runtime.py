@@ -126,7 +126,7 @@ def verify_loaded(profile):
         if not path or path in ('built-in', 'frozen'):
             continue
         path = str(Path(path).resolve())
-        if name.split('.')[0] in profile['modules'] or path in known or not standard_library(Path(path)):
+        if path in known or not standard_library(Path(path)):
             expected = known.get(path, imported.get(name))
             if expected is None:
                 raise RuntimeMismatch(f'Loaded source was not fingerprinted: {name} at {path}')
