@@ -1,5 +1,9 @@
 # Continue GPU verification on huan-main-a100
 
+This handoff was executed on 2026-11-05.
+See the [GPU verification results](VERIFICATION.md#gpu-verification-on-2026-11-05) for completed native inference, exact parsing checks, all four real workflows, both Docker images, and remaining limits.
+The instructions below retain the original reproduction procedure.
+
 The implementation is ready for GPU verification, and the PR must remain a draft until the outstanding checks are assessed.
 Use a PC with an existing authorized connection to `huan-main-a100`.
 The development session could not reach that server and performed no GPU work there.
