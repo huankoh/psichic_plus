@@ -227,8 +227,26 @@ def test_plan_omission_defaults_and_explicit_rank_compatibility():
 
 
 @pytest.mark.parametrize("mode", [Mode.BOLTZ, Mode.REFINEMENT])
+def test_explicit_legacy_neutral_weights_preserve_nonensemble_results(mode):
+    rows = [Candidate(1, "first", "CCO"), Candidate(2, "second", "CCN")]
+    shortlist_size = 1 if mode.pyramid else None
+    default = Plan(mode, shortlist_size)
+    explicit = Plan(mode, shortlist_size, Metric.PROBABILITY, 1.0, 1.0)
+
+    def psichic(candidates):
+        return EngineRun({row.key: rich() for row in candidates})
+
+    def boltz(candidates):
+        return EngineRun({row.key: native(probability=row.row / 3) for row in candidates})
+
+    expected = run_workflow(rows, default, psichic=psichic, boltz=boltz)
+    actual = run_workflow(rows, explicit, psichic=psichic, boltz=boltz)
+    assert [row_record(row) for row in actual.rows] == [row_record(row) for row in expected.rows]
+
+
+@pytest.mark.parametrize("mode", [Mode.BOLTZ, Mode.REFINEMENT])
 @pytest.mark.parametrize("override", [{"ensemble": EnsembleMethod.RANK}, {"ensemble": EnsembleMethod.CONCENTRATION},
-                                      {"psichic_weight": 1.0}, {"boltz_weight": 1.0}])
+                                      {"psichic_weight": 0.5}, {"boltz_weight": 2.0}])
 def test_meaningless_nonensemble_options_are_rejected(mode, override):
     with pytest.raises(ValueError):
         Plan(mode, 2 if mode.pyramid else None, **override)

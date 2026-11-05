@@ -255,7 +255,7 @@ def test_csv_ids_are_strings_even_when_they_look_missing(tmp_path):
     ("boltz-only", ["--ensemble", "concentration-v1"]),
     ("boltz-only", ["--psichic-output", "affinity"]),
     ("boltz-only", ["--psichic-output", "distribution"]),
-    ("boltz-only", ["--psichic-weight", "1.0"]),
+    ("boltz-only", ["--psichic-weight", "0.5"]),
 ])
 def test_cli_rejects_incompatible_explicit_options_before_engine_or_output(mode, options, fasta, tmp_path, capsys):
     output = tmp_path / "rejected"
@@ -351,7 +351,8 @@ runpy.run_module("applications.scorer.boltz2", run_name="__main__")
         assert prepared["sequences"][0]["protein"]["msa"] == "empty"
 
 
-def test_module_cli_boltz_only_subprocess(fake_boltz, fasta, tmp_path):
+@pytest.mark.parametrize("weights", [[], ["--psichic-weight", "1.0", "--boltz-weight", "1.0"]])
+def test_module_cli_boltz_only_subprocess(weights, fake_boltz, fasta, tmp_path):
     import subprocess
     import sys
 
@@ -361,7 +362,7 @@ def test_module_cli_boltz_only_subprocess(fake_boltz, fasta, tmp_path):
     completed = subprocess.run([sys.executable, "-m", "applications.scorer.boltz2", "--mode", "boltz-only",
                                 "--candidates", str(candidates), "--fasta", str(fasta), "--msa-mode", "single",
                                 "--output", str(output), "--boltz-python", str(fake_boltz), "--boltz-timeout", "5",
-                                "--", "--accelerator", "cpu"], capture_output=True, text=True, timeout=20)
+                                *weights, "--", "--accelerator", "cpu"], capture_output=True, text=True, timeout=20)
     assert completed.returncode == 0, completed.stderr
     assert json.loads((output / "results.json").read_text())[0]["final_rank"] == 1
 

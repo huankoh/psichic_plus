@@ -119,7 +119,8 @@ The concentration method resolves an omitted metric to native affinity and accep
 It rejects binder probability and every manual fixed-weight override, including 1.0.
 The resolved plan records null fixed weights for this method because its weights are derived per row.
 Explicit old `rank-v1` metric and weight calls remain valid.
-Both method names are rejected for non-ensemble modes, as are manual weights.
+Both method names and non-default weights are rejected for non-ensemble modes.
+Explicit neutral weights of 1.0 remain accepted for compatibility with existing Python and CLI calls.
 
 ### Distribution and selection
 

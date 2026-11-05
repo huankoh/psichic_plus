@@ -98,14 +98,13 @@ class Plan:
         if concentration and self.metric not in (OMITTED, Metric.AFFINITY):
             raise ValueError("concentration-v1 requires native affinity_pred_value, not binder probability")
         weights = (self.psichic_weight, self.boltz_weight)
-        if any(weight is not OMITTED for weight in weights):
-            if not self.mode.ensemble:
-                raise ValueError("Weights apply only to ensemble modes")
-            if concentration:
-                raise ValueError("concentration-v1 does not accept manual fixed weights")
+        if concentration and any(weight is not OMITTED for weight in weights):
+            raise ValueError("concentration-v1 does not accept manual fixed weights")
         weights = tuple(1.0 if weight is OMITTED else weight for weight in weights)
         if any(not finite_number(w) or w < 0 for w in weights) or not 0 < sum(weights) < math.inf:
             raise ValueError("Weights must be finite, nonnegative, and have a positive finite sum")
+        if not self.mode.ensemble and weights != (1.0, 1.0):
+            raise ValueError("Non-default weights apply only to ensemble modes")
         if self.mode is Mode.BOLTZ and self.psichic_output is not OMITTED:
             raise ValueError("PSICHIC output applies only to modes that use PSICHIC")
         output = Output.AFFINITY if self.psichic_output is OMITTED else Output(self.psichic_output)
