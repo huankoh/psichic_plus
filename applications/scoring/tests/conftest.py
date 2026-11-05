@@ -2,6 +2,7 @@ from dataclasses import asdict
 import hashlib
 import json
 from pathlib import Path
+import math
 
 import pytest
 
@@ -82,7 +83,9 @@ def transfer(root, task, *, affinity=6., alpha=4., beta=4., boltz=-3., probabili
         record = {"status": "succeeded", "raw_affinity": affinity, "adaptive_score": -affinity,
                   "submitted_smiles": task.fingerprint.submitted_smiles, "normalized_smiles": None, "distribution": distribution}
         put("raw.json", {"schema_version": 1, "task": task.to_dict(), "native": {
-            "predicted_binding_affinity": affinity, "reg_alpha": alpha, "reg_beta": beta,
+            "predicted_binding_affinity": affinity,
+            "reg_alpha": {"nonfinite_float": repr(alpha)} if isinstance(alpha, float) and not math.isfinite(alpha) else alpha,
+            "reg_beta": {"nonfinite_float": repr(beta)} if isinstance(beta, float) and not math.isfinite(beta) else beta,
             "full_native_extra": "retained"}})
         roles["raw_psichic"] = "raw.json"
     receipt = Receipt(task, json.dumps(record), tuple(Artifact.from_file(root, role, path) for role, path in roles.items()))

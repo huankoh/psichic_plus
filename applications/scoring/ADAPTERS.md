@@ -74,6 +74,7 @@ The controlled executable examples in `tests/conftest.py` show complete fingerpr
 For Boltz, retain the exact rendered input, native affinity JSON, structure, logs, execution evidence, and full provenance.
 The existing `parse_affinity` parser is reused by receipt acceptance.
 For PSICHIC, preserve the full raw row and distribution diagnostics from the same invocation as affinity.
+Pass native alpha and beta through `encode_native_parameter` when writing raw JSON so non-finite floats retain their original type and diagnostics.
 An affinity-only legacy saved result cannot satisfy distribution-required tasks.
 A generator search score is not an accepted inference receipt.
 

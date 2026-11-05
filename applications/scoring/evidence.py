@@ -2,6 +2,7 @@
 
 from dataclasses import asdict, dataclass
 import hashlib
+import math
 import os
 from pathlib import Path, PurePosixPath
 import stat
@@ -16,6 +17,22 @@ from .contracts import (
 
 MAX_DOCUMENT = 16 * 1024 * 1024
 COMMON_ROLES = frozenset({"native_input", "provenance", "execution", "stdout", "stderr"})
+
+
+def encode_native_parameter(value):
+    """Retain non-finite float identity without ambiguous JSON strings or nulls."""
+    if isinstance(value, float) and not math.isfinite(value):
+        return {"nonfinite_float": repr(value)}
+    return value
+
+
+def _decode_native_parameter(value):
+    if isinstance(value, dict):
+        fields(value, "nonfinite_float")
+        if value["nonfinite_float"] not in ("nan", "inf", "-inf"):
+            raise ContractError("Invalid non-finite native parameter encoding")
+        return float(value["nonfinite_float"])
+    return value
 
 
 def fsync_directory(path):
@@ -210,7 +227,7 @@ def validate_native(receipt, staging):
     d = record["distribution"]
     if d["state"] == "not-requested":
         return
-    alpha, beta = native.get("reg_alpha"), native.get("reg_beta")
+    alpha, beta = (_decode_native_parameter(native.get(name)) for name in ("reg_alpha", "reg_beta"))
     valid = all(finite_number(v) and v > 0 for v in (alpha, beta))
     if valid:
         try:

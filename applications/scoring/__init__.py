@@ -5,7 +5,7 @@ from .contracts import (
     IncompleteRun, ManifestRow, Ownership, Resolution, RunBusy, SelectionState, Settings,
     State, StateError, Target, Task,
 )
-from .evidence import Artifact, Receipt
+from .evidence import Artifact, Receipt, encode_native_parameter
 from .run import Diagnostic, ScoringRun, Selection
 from .reports import Report, Waiting
 
@@ -13,4 +13,5 @@ __all__ = [
     "Acceptance", "Artifact", "Asset", "BatchContext", "Completion", "ContractError", "Diagnostic", "Engine",
     "Entry", "Fingerprint", "IncompleteRun", "ManifestRow", "Ownership", "Receipt", "Resolution", "RunBusy",
     "Report", "Waiting", "ScoringRun", "Selection", "SelectionState", "Settings", "State", "StateError", "Target", "Task",
+    "encode_native_parameter",
 ]

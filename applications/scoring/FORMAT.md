@@ -118,7 +118,10 @@ Valid alpha and beta are positive finite values, concentration is their exact su
 A distribution failure preserves the affinity and original diagnostic values.
 Its `raw_alpha` and `raw_beta` are Python `repr` strings of the native values.
 Missing native values use `None`.
-Non-finite native diagnostics must be encoded as strings or null because contract JSON prohibits NaN and infinity.
+Non-finite float parameters use the tagged object `{"nonfinite_float":"nan"}`, `{"nonfinite_float":"inf"}`, or `{"nonfinite_float":"-inf"}` because contract JSON prohibits non-finite numbers.
+Use `encode_native_parameter` for `reg_alpha` and `reg_beta` when retaining raw native rows.
+The validator decodes this tag before checking the original diagnostic representation.
+Ordinary strings remain strings and missing values remain null, preserving their distinct `repr` diagnostics.
 A distribution-required task rejects `not-requested` evidence.
 
 `raw_psichic` has exactly `schema_version`, the complete `task`, and `native`.
@@ -176,4 +179,6 @@ They include completion counts, shortage details, method, source reference, dire
 `files.json` records the byte sizes and hashes of the JSON, CSV, and summary.
 Publication orders the durable database snapshot, fsynced temporary files, atomic report-directory rename, published database marker, and atomic latest pointer.
 Reopening can finish publication without replacing any previous version.
+Finalization first publishes committed interrupted snapshots, even if current observations changed or are still pending.
+The latest pointer always names the highest published version.
 Unfinished populations return diagnostics rather than a final global ranking.

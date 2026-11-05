@@ -97,6 +97,29 @@ def test_sigkill_after_copy_before_receipt_acceptance_can_reimport(make_run, tmp
     assert list((run.path / "staging").iterdir())
 
 
+@pytest.mark.parametrize("complete_retry", [False, True])
+def test_interrupted_snapshot_publishes_after_observations_change(make_run, tmp_path, complete_retry):
+    run = make_run(n=3)
+    tasks = prepare(run)
+    for index, task in enumerate(tasks):
+        run.accept(transfer(tmp_path / f"initial-{index}", task, failure="failed" if index else None))
+    first = run.finalize()
+    original = file_hashes(first.directory)
+    run.retry(tasks[1].entry_key, Engine.PSICHIC)
+    retry, = prepare(run)
+    run.accept(transfer(tmp_path / "second", retry, affinity=8))
+    kill_at_boundary(run, "report-directory")
+    run = ScoringRun.open(run.path)
+    run.retry(tasks[2].entry_key, Engine.PSICHIC)
+    if complete_retry:
+        retry, = prepare(run)
+        run.accept(transfer(tmp_path / "third", retry, affinity=9))
+    run.finalize()
+    assert [row["score"] for row in run.results(2)] == [6, 8, None]
+    assert run.latest().version == (3 if complete_retry else 2)
+    assert file_hashes(first.directory) == original
+
+
 def test_sigkill_during_create_rejects_incomplete_manifest(tmp_path, target):
     path = tmp_path / "interrupted-create"
     script = r'''

@@ -249,8 +249,9 @@ def _publish(run, db, row, top_n):
     db.execute("BEGIN IMMEDIATE")
     db.execute("UPDATE reports SET state='published' WHERE version=?", (report.version,))
     db.execute("COMMIT")
-    atomic_pointer(run.path / "latest.json", {"schema_version": 1, "version": report.version,
-                                            "snapshot_digest": row["snapshot"], "directory": f"reports/v{report.version:08d}"})
+    newest = db.execute("SELECT version,snapshot FROM reports WHERE state='published' ORDER BY version DESC LIMIT 1").fetchone()
+    atomic_pointer(run.path / "latest.json", {"schema_version": 1, "version": newest["version"],
+                                            "snapshot_digest": newest["snapshot"], "directory": f"reports/v{newest['version']:08d}"})
     return report
 
 
@@ -258,6 +259,8 @@ def finalize(run, *, top_n):
     if type(top_n) is not int or not 0 <= top_n <= 100:
         raise ContractError("Summary top_n must be between 0 and 100")
     with run._locked() as db:
+        for interrupted in db.execute("SELECT * FROM reports WHERE state='building' ORDER BY version"):
+            _publish(run, db, interrupted, top_n)
         selection = run._select(db)
         unresolved = dict(db.execute("SELECT state,count(*) FROM evaluations WHERE state NOT IN ('succeeded','failed') GROUP BY state"))
         if unresolved:
