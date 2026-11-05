@@ -18,13 +18,15 @@ def expected_source():
     template = Environment(loader=FileSystemLoader(
         Path(message_passing.__file__).resolve().parent)).get_template('propagate.jinja')
     records = []
-    for cls in (psichic_model.PNAConv, psichic_model.DrugProteinConv):
+    contracts = ((psichic_model.PNAConv, False), (psichic_model.DrugProteinConv, False),
+                 (psichic_model.GCNConv, True))
+    for cls, fuse in contracts:
         inspector = Inspector(cls)
         for method, exclude in (('message', None), ('aggregate', [0, 'aggr']),
                                 ('message_and_aggregate', [0]), ('update', [0]), ('edge_update', None)):
             inspector.inspect_signature(method, exclude=exclude)
-        # Fused aggregation would make rendering depend on instance configuration.
-        if inspector.implements('message_and_aggregate') or inspector.implements('edge_update'):
+        # GCNCluster uses GCNConv's default add aggregation, which enables fusion.
+        if inspector.implements('message_and_aggregate') != fuse or inspector.implements('edge_update'):
             raise RuntimeMismatch(f'Unsupported generated source contract for {cls.__module__}.{cls.__name__}')
         update = inspector.get_signature('update')
         signature = Signature(
@@ -37,13 +39,13 @@ def expected_source():
             message_args=inspector.get_param_names('message'),
             aggregate_args=inspector.get_param_names('aggregate'),
             message_and_aggregate_args=inspector.get_param_names('message_and_aggregate'),
-            update_args=inspector.get_param_names('update'), fuse=False,
+            update_args=inspector.get_param_names('update'), fuse=fuse,
         )
         records.append({
             'module': f'{cls.__module__}_{cls.__name__}_propagate',
             'sha256': hashlib.sha256(source.encode('utf-8')).hexdigest(),
             'generator': 'pyg-2.7.0-propagate-v1',
             'class': f'{cls.__module__}.{cls.__qualname__}',
-            'template': 'torch_geometric/nn/conv/propagate.jinja', 'fuse': False,
+            'template': 'torch_geometric/nn/conv/propagate.jinja', 'fuse': fuse,
         })
     return records

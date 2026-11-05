@@ -28,7 +28,7 @@ import torch_geometric
 
 directory = Path(sys.argv[1])
 mode = sys.argv[2]
-classes = (psichic_model.PNAConv, psichic_model.DrugProteinConv)
+classes = (psichic_model.PNAConv, psichic_model.DrugProteinConv, psichic_model.GCNConv)
 names = [f'{cls.__module__}_{cls.__name__}_propagate' for cls in classes]
 profile_path = directory / 'profile.json'
 
@@ -77,8 +77,13 @@ else:
     profile = json.loads(profile_path.read_text())
     width = int(mode)
     runtime.verify_loaded(profile)
-    layers = [classes[0](width, width, ['mean'], ['identity'], torch.tensor([0, 1])),
-              classes[1](atom_channels=width, residue_channels=width)]
+    model = psichic_model.PSICHICPlusNet(
+        torch.tensor([0, 1]), torch.tensor([0, 1]), hidden_channels=width,
+        total_layer=1, K=[2], heads=1, device='cpu')
+    native_layers = [layer for layer in model.modules()
+                     if isinstance(layer, torch_geometric.nn.MessagePassing)]
+    assert {type(layer) for layer in native_layers} == set(classes)
+    assert all(layer.fuse == (type(layer) is psichic_model.GCNConv) for layer in native_layers)
     loaded = runtime.verify_loaded(profile)
     observed = {name: loaded[name] for name in names}
     for name in names:
