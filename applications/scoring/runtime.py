@@ -79,7 +79,8 @@ def source_inventory(roots):
     for distribution in distributions:
         distribution_name = distribution.metadata['Name']
         for item in sorted(distribution.files or ()):
-            if not source_path(item) and item.name not in ('RECORD', 'METADATA', 'PKG-INFO', 'SOURCES.txt', 'direct_url.json'):
+            native_resource = (distribution_name or '').lower() == 'triton' and '__pycache__' not in item.parts
+            if not native_resource and not source_path(item) and item.name not in ('RECORD', 'METADATA', 'PKG-INFO', 'SOURCES.txt', 'direct_url.json'):
                 continue
             path = Path(item.locate()).resolve(strict=True)
             if str(path) not in files:
@@ -112,14 +113,20 @@ def verify_files(files):
             raise RuntimeMismatch(f"Verified file changed or disappeared: {item['path']}. Create a new run.")
 
 
+def native_support():
+    return importlib.import_module((__package__ + '.' if __package__ else '') + 'native_build')
+
+
 def identity(profile):
     return {**{key: ([{'name': f['name'], 'sha256': f['sha256']} for f in profile[key]]
                     if key in ('weights', 'source') else profile[key])
               for key in ('engine_version', 'weights', 'source', 'environment', 'device', 'precision')},
-            'generated_source': profile.get('generated_source', [])}
+            'generated_source': profile.get('generated_source', []),
+            'native_generation': (native_support().policy_identity(profile['native_generation'])
+                                  if profile.get('native_generation') else None)}
 
 
-def verify_loaded(profile):
+def verify_loaded(profile, native=None):
     """Check actual imported bytes against the preflight inventory before accepting output."""
     verify_files(profile['weights'] + profile['source'])
     if package_versions() != profile['environment']['packages'] or platform.python_version() != profile['environment']['python']:
@@ -127,6 +134,9 @@ def verify_loaded(profile):
     known = {f['path']: f for f in profile['source'] if 'module' not in f}
     imported = {f['module']: f for f in profile['source'] if 'module' in f}
     generated = {f['module']: f for f in profile.get('generated_source', [])}
+    if native is not None and native.profile != profile:
+        raise RuntimeMismatch('Native build evidence belongs to a different frozen profile')
+    native_files = native.verified() if native is not None else {}
     loaded = {}
     for name, module in tuple(sys.modules.items()):
         spec = getattr(module, '__spec__', None)
@@ -135,6 +145,8 @@ def verify_loaded(profile):
             continue
         path = str(Path(path).resolve())
         expected = generated.get(name) or known.get(path) or imported.get(name)
+        if expected is None and (name, path) in native_files:
+            expected = {'sha256': native_files[(name, path)]}
         if expected is not None or not standard_library(Path(path)):
             if expected is None:
                 raise RuntimeMismatch(f'Loaded source was not fingerprinted: {name} at {path}')
@@ -251,7 +263,9 @@ def inspect_boltz(options):
     roots = {name: Path(importlib.import_module(name).__file__).parent for name in modules}
     roots['executor-runtime'] = Path(__file__)
     roots['executor-guardian'] = Path(__file__).with_name('guardian.py')
-    profile = {'engine_version': '2.2.1', 'weights': [file_evidence(n, p) for n, p in files],
+    roots['executor-native-build'] = Path(__file__).with_name('native_build.py')
+    native_generation = native_support().freeze()
+    profile = {'engine_version': '2.2.1', 'native_generation': native_generation, 'weights': [file_evidence(n, p) for n, p in files],
                'source': source_inventory(roots), 'environment': environment(resolved['accelerator']), 'device': resolved['accelerator'],
                'precision': 'bf16-mixed; float32 matmul highest', 'modules': modules,
                'executable': sys.executable, 'native_help': native_help, 'resolved': resolved,
@@ -352,10 +366,25 @@ def execute_boltz(directory):
             if name != 'out_dir' and ctx.params[name] != value:
                 raise RuntimeMismatch(f'Native option changed after preparation: {name}')
         verify_loaded(profile)
+        from contextlib import nullcontext
+        builds = (native_support().NativeBuilds(profile, directory / 'native-builds')
+                  if profile.get('native_generation') else nullcontext())
+        native = None
         try:
-            predict.invoke(ctx)
+            with builds as native:
+                predict.invoke(ctx)
         finally:
-            loaded = verify_loaded(profile)
+            observed = []
+            for name, module in tuple(sys.modules.items()):
+                origin = getattr(getattr(module, '__spec__', None), 'origin', None)
+                if origin and origin not in ('built-in', 'frozen'):
+                    path = Path(origin).resolve()
+                    observed.append({'module': name, 'path': str(path),
+                                     'sha256': checksum(path) if path.is_file() else None})
+            (directory / 'loaded-observed.json').write_text(json.dumps(observed, sort_keys=True))
+            loaded = verify_loaded(profile, native)
+            if native is not None:
+                (directory / 'native-builds.json').write_text(json.dumps(native.evidence(), sort_keys=True, allow_nan=False))
             content = {'profile_digest': hashlib.sha256(json.dumps(identity(profile), sort_keys=True,
                        separators=(',', ':'), ensure_ascii=True, allow_nan=False).encode()).hexdigest(),
                        'loaded': loaded, 'native_command': command}
@@ -385,4 +414,5 @@ def main():
 
 
 if __name__ == '__main__':
+    sys.modules['runtime'] = sys.modules[__name__]
     sys.exit(execute_boltz(sys.argv[2]) if sys.argv[1:2] == ['--execute'] else main())

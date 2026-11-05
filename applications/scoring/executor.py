@@ -17,7 +17,7 @@ from .contracts import Asset, BatchContext, Engine, Fingerprint, Ownership, Reso
 from .evidence import atomic_pointer, fsync_directory, write_file
 from .processes import alive, exclusive, lock_held, process_identity, signal_owned
 from .run import ScoringRun
-from .runtime import checksum, verify_files
+from .runtime import checksum, native_support, verify_files
 
 
 def create_run(plan):
@@ -38,6 +38,8 @@ def _profile_assets(profile, name):
     assets = (Asset(name + '-inventory-v1', digest(declarations)),)
     if name == 'source' and profile.get('generated_source'):
         assets += (Asset('generated-source-v1', digest(profile['generated_source'])),)
+    if name == 'source' and profile.get('native_generation'):
+        assets += (Asset('native-generation-v1', digest(native_support().policy_identity(profile['native_generation']))),)
     return assets
 
 

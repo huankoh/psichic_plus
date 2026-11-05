@@ -331,7 +331,7 @@ predict = click.Command('predict', params=params, callback=callback)
     binary = root / 'bin'
     binary.mkdir()
     python = binary / 'python'
-    python.write_text(f'#!{sys.executable}\nimport sys, runpy\nsys.executable = {str(python)!r}\nsys.path.insert(0, {str(packages)!r})\nsys.argv.pop(0)\nif sys.argv[0] == "-B": sys.argv.pop(0)\nrunpy.run_path(sys.argv[0], run_name="__main__")\n')
+    python.write_text(f'#!{sys.executable}\nimport sys, runpy\nfrom pathlib import Path\nsys.executable = {str(python)!r}\nsys.path.insert(0, {str(packages)!r})\nsys.argv.pop(0)\nif sys.argv[0] == "-B": sys.argv.pop(0)\nsys.path.insert(0, str(Path(sys.argv[0]).resolve().parent))\nrunpy.run_path(sys.argv[0], run_name="__main__")\n')
     python.chmod(0o755)
     (binary / 'boltz').write_text('# controlled native executable marker\n')
     cache = root / 'cache'

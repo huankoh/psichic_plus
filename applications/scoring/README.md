@@ -140,3 +140,48 @@ Changing their inventoried source requires a new run.
 This avoids inferring which optional dependencies inference might load, at the cost of hashing the broader installed runtime during preflight.
 The contract does not attest arbitrary in-memory monkeypatches, every library loaded outside Python module specifications, or unlisted non-source data files.
 Validation remains offline and does not construct prediction models, deserialize checkpoints, initialize CUDA, or create a run directory.
+
+## Runtime native generation
+
+Triton host extensions have a separate `native_generation` policy.
+They do not exist at preflight and are never added to the installed source inventory after inference.
+The Linux Triton 3.3.1 policy freezes all installed Triton resources, including C sources, headers, compiler binaries, and bitcode.
+It also records GCC, its programs and resources, the compiler sysroot, Python and system headers, link inputs, loader configuration, and CUDA driver library bytes.
+The policy and its input hashes contribute to prediction fingerprints and reopened-run identity.
+Runtime signatures and temporary output paths belong to invocation evidence instead.
+
+Validation inspects files and runs read-only compiler queries, including preprocessing an empty input to discover include paths.
+It creates no native binary, Triton cache, or run directory.
+It does not construct a prediction model, deserialize a checkpoint, or initialize CUDA.
+The driver link library must be available even in a CPU-only qualification container.
+Native compilation is an execution preparation step inside the dedicated Boltz worker.
+
+Each invocation exclusively creates its own empty Triton cache.
+A scoped Python profile observer watches the unmodified Triton generator, compiler, and cache functions.
+It matches the registry's `nvidia` alias and the canonical import by code equality and the same frozen file path.
+It accepts the utility source only from `CudaUtils` and launchers only from `CudaLauncher` with a frozen JIT function source and a supported argument signature.
+The observer regenerates the expected C source and checks the exact compiler command, dependency bytes, and build options.
+Before cache publication and loading, it independently rebuilds the actual temporary source and requires exact binary equality.
+The rebuild uses the original source path because `driver.c` embeds `__FILE__` in diagnostics.
+No numerical model code or upstream function is replaced.
+The observer is removed when the scope exits.
+
+A cache hit needs a matching build observed in the same worker.
+An existing binary or a saved build receipt cannot authorize a new worker's cache.
+Corruption, an unknown generated module, a different path, changed native inputs, or an unsupported compiler control prevents output acceptance.
+Every observed variant retains its signature, kernel source hash, command, generated C, dependencies, linker trace, rebuild, actual binary, and loaded CUDA driver hash.
+Receipts also retain the invocation's native cache files and final loaded-module hashes.
+The installed-source guard, PyG generation contract, and restricted ESM loading remain in force.
+
+This contract establishes file provenance for Triton's host CPython extensions under the recorded toolchain.
+The source of truth is the frozen input policy plus a live observed build and independent byte comparison.
+It is not a sandbox or an attestation of arbitrary in-memory changes, hostile concurrent writers, the operating-system kernel, GPU firmware, or scientific accuracy.
+Retained Triton device-kernel cache files are output evidence, not independently rebuilt device-kernel attestations.
+Other compiler families, Triton versions, custom cache managers, and custom include or compiler search controls fail closed.
+Moving installed toolchains or changing driver libraries can require a new run.
+Changing only runtime temporary paths does not change prediction identity.
+
+The real CPU qualification probe is `applications/scoring/tests/native_build_probe.py`.
+It runs in the pinned Linux environment with a task-owned driver library copy and no GPU devices.
+Running it twice with distinct output directories and one profile checks fresh-process behavior without reusing compilation receipts.
+The ordinary local test suite skips this lane when Triton is unavailable.

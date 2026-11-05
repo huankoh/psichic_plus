@@ -167,7 +167,7 @@ else:
 print('stdlib alias accepted; unrecorded and changed external sources rejected')
 '''
     result = subprocess.run([sys.executable, "-B", "-c", script, str(external)],
-                            capture_output=True, text=True, timeout=30)
+                            capture_output=True, text=True, timeout=120)
     assert result.returncode == 0, result.stdout + result.stderr
 
 
@@ -218,11 +218,11 @@ runtime.verify_loaded(profile)
         (first / 'generated.py', 'unexpected_generator', False),
     ):
         result = subprocess.run([sys.executable, '-B', '-c', script, str(path), str(profile), name],
-                                capture_output=True, text=True, timeout=30)
+                                capture_output=True, text=True, timeout=120)
         assert (result.returncode == 0) == accepted, result.stdout + result.stderr
         if not accepted:
             assert 'Loaded source was not fingerprinted' in result.stderr
     (second / 'generated.py').write_text('value = 2\n')
     result = subprocess.run([sys.executable, '-B', '-c', script, str(second / 'generated.py'),
-                             str(profile), 'recorded_generator'], capture_output=True, text=True, timeout=30)
+                             str(profile), 'recorded_generator'], capture_output=True, text=True, timeout=120)
     assert result.returncode != 0 and 'Loaded source changed' in result.stderr

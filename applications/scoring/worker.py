@@ -17,7 +17,7 @@ from .contracts import Engine, Task, canonical, digest, loads
 from .evidence import Artifact, Receipt, atomic_pointer, encode_native_parameter, write_file
 from .guardian import start_guardian
 from .processes import exclusive, parent_guard, process_identity, stop_group, wait_owned
-from .runtime import identity, offline_only, verify_files, verify_inputs, verify_loaded
+from .runtime import identity, native_support, offline_only, verify_files, verify_inputs, verify_loaded
 
 
 def read_request(directory):
@@ -105,6 +105,8 @@ def publish(directory):
     if loaded['profile_digest'] != digest(identity(request['profile'])):
         raise ValueError('Completed worker loaded a different runtime')
     verify_files(request['profile']['source'] + request['profile']['weights'])
+    if request['profile'].get('native_generation'):
+        native_support().verify_inputs(request['profile']['native_generation'])
     mapping = {item['entry_key']: item for item in request['mapping']}
     for task_value in request['tasks']:
         task = Task.from_dict(task_value)
@@ -143,6 +145,11 @@ def publish(directory):
                 if completion['returncode'] != 0:
                     continue
                 record = {'status': 'failed', 'stage': 'boltz_output', 'reason': str(error)}
+        if task.engine is Engine.BOLTZ and request['profile'].get('native_generation'):
+            roles['native_builds'] = directory / 'native-builds.json'
+            for index, path in enumerate(sorted((directory / 'native-builds').rglob('*'))):
+                if path.is_file():
+                    roles[f'native_build_artifact_{index:05d}'] = path
         transfer = directory / 'transfers' / f'{task.attempt_id}-{uuid.uuid4().hex}'
         transfer.mkdir()
         for role, path in roles.items():
@@ -176,6 +183,8 @@ def own(directory, *, salvage=False):
         signal.signal(signal.SIGINT, interrupt)
         command = request['command']
         env = child_environment(request['controls'], boltz=request['engine'] == 'boltz')
+        if request['engine'] == 'boltz' and request['profile'].get('native_generation'):
+            env['TRITON_CACHE_DIR'] = str(directory / 'native-builds' / 'cache')
         process = None
         with (directory / 'stdout.log').open('xb') as stdout, (directory / 'stderr.log').open('xb') as stderr:
             try:
