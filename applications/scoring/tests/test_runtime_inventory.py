@@ -47,3 +47,60 @@ print('stdlib alias accepted; unrecorded and changed external sources rejected')
     result = subprocess.run([sys.executable, "-B", "-c", script, str(external)],
                             capture_output=True, text=True, timeout=30)
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_generated_templates_are_part_of_source_inventory(tmp_path):
+    from applications.scoring import runtime
+    import pytest
+
+    template = tmp_path / 'propagate.jinja'
+    template.write_text('original template')
+    source = runtime.source_files({'generator': tmp_path})
+    assert [item['path'] for item in source] == [str(template.resolve())]
+    template.write_text('changed template')
+    with pytest.raises(runtime.RuntimeMismatch, match='changed or disappeared'):
+        runtime.verify_files(source)
+
+
+def test_prerecorded_temporary_source_requires_module_identity_and_exact_bytes(tmp_path):
+    first, second = tmp_path / 'first', tmp_path / 'second'
+    first.mkdir()
+    second.mkdir()
+    for directory in (first, second):
+        (directory / 'generated.py').write_text('value = 1\n')
+    script = r'''
+import importlib.util
+import json
+import platform
+import sys
+from pathlib import Path
+from applications.scoring import runtime
+
+path, profile_path = map(Path, sys.argv[1:3])
+name = sys.argv[3]
+spec = importlib.util.spec_from_file_location(name, path)
+sys.modules[name] = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(sys.modules[name])
+if not profile_path.exists():
+    profile = {'source': runtime.source_inventory({'runtime': runtime.__file__}), 'weights': [],
+               'environment': {'python': platform.python_version(), 'packages': runtime.package_versions()}}
+    profile_path.write_text(json.dumps(profile))
+else:
+    profile = json.loads(profile_path.read_text())
+runtime.verify_loaded(profile)
+'''
+    profile = tmp_path / 'profile.json'
+    for path, name, accepted in (
+        (first / 'generated.py', 'recorded_generator', True),
+        (second / 'generated.py', 'recorded_generator', True),
+        (first / 'generated.py', 'unexpected_generator', False),
+    ):
+        result = subprocess.run([sys.executable, '-B', '-c', script, str(path), str(profile), name],
+                                capture_output=True, text=True, timeout=30)
+        assert (result.returncode == 0) == accepted, result.stdout + result.stderr
+        if not accepted:
+            assert 'Loaded source was not fingerprinted' in result.stderr
+    (second / 'generated.py').write_text('value = 2\n')
+    result = subprocess.run([sys.executable, '-B', '-c', script, str(second / 'generated.py'),
+                             str(profile), 'recorded_generator'], capture_output=True, text=True, timeout=30)
+    assert result.returncode != 0 and 'Loaded source changed' in result.stderr

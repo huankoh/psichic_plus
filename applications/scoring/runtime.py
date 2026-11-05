@@ -51,7 +51,7 @@ def source_files(roots):
         root = Path(root).resolve()
         paths = [root] if root.is_file() else sorted(p for p in root.rglob('*') if p.is_file()
             and '__pycache__' not in p.parts and 'tests' not in p.relative_to(root).parts
-            and (p.suffix in ('.py', '.so', '.pyd', '.dylib', '.smi', '.jsonl') or '.so.' in p.name))
+            and (p.suffix in ('.py', '.so', '.pyd', '.dylib', '.smi', '.jsonl', '.jinja') or '.so.' in p.name))
         if not paths:
             raise ValueError(f'No source found for {name} at {root}')
         for path in paths:
@@ -107,9 +107,10 @@ def verify_files(files):
 
 
 def identity(profile):
-    return {key: ([{'name': f['name'], 'sha256': f['sha256']} for f in profile[key]]
-                  if key in ('weights', 'source') else profile[key])
-            for key in ('engine_version', 'weights', 'source', 'environment', 'device', 'precision')}
+    return {**{key: ([{'name': f['name'], 'sha256': f['sha256']} for f in profile[key]]
+                    if key in ('weights', 'source') else profile[key])
+              for key in ('engine_version', 'weights', 'source', 'environment', 'device', 'precision')},
+            'generated_source': profile.get('generated_source', [])}
 
 
 def verify_loaded(profile):
@@ -117,8 +118,9 @@ def verify_loaded(profile):
     verify_files(profile['weights'] + profile['source'])
     if package_versions() != profile['environment']['packages'] or platform.python_version() != profile['environment']['python']:
         raise RuntimeMismatch('Loaded packages or Python changed. Create a new run.')
-    known = {f['path']: f for f in profile['source']}
+    known = {f['path']: f for f in profile['source'] if 'module' not in f}
     imported = {f['module']: f for f in profile['source'] if 'module' in f}
+    generated = {f['module']: f for f in profile.get('generated_source', [])}
     loaded = {}
     for name, module in tuple(sys.modules.items()):
         spec = getattr(module, '__spec__', None)
@@ -126,8 +128,8 @@ def verify_loaded(profile):
         if not path or path in ('built-in', 'frozen'):
             continue
         path = str(Path(path).resolve())
-        if path in known or not standard_library(Path(path)):
-            expected = known.get(path, imported.get(name))
+        expected = generated.get(name) or known.get(path) or imported.get(name)
+        if expected is not None or not standard_library(Path(path)):
             if expected is None:
                 raise RuntimeMismatch(f'Loaded source was not fingerprinted: {name} at {path}')
             if checksum(path) != expected['sha256']:
@@ -163,9 +165,11 @@ def environment(device):
 
 def inspect_psichic(options):
     from applications.scorer.psichic_plus.predictor import load_helpers
+    from applications.scoring.pyg_source import expected_source
     import applications.scoring
 
     helpers = load_helpers()
+    generated = expected_source()
     roots = {'screening': Path(helpers.__file__).parent,
              'scoring': Path(applications.scoring.__file__).parent,
              'scorer': Path(applications.scoring.__file__).parent.parent / 'scorer'}
@@ -180,6 +184,7 @@ def inspect_psichic(options):
     files += [('esm/model', esm), ('esm/contact-regression', esm.with_name(esm.stem + '-contact-regression.pt'))]
     profile = {'engine_version': 'psichic-plus-local-v1', 'weights': [file_evidence(n, p) for n, p in files],
                'source': source_inventory(roots), 'environment': environment(options['device']), 'device': options['device'],
+               'generated_source': generated,
                'precision': 'fp32; ESM token storage fp16', 'modules': modules,
                'executable': sys.executable, 'screening': str(roots['screening'])}
     profile['loaded'] = verify_loaded(profile)

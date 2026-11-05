@@ -35,7 +35,10 @@ def create_run(plan):
 
 def _profile_assets(profile, name):
     declarations = [{'name': f['name'], 'sha256': f['sha256']} for f in profile[name]]
-    return (Asset(name + '-inventory-v1', digest(declarations)),)
+    assets = (Asset(name + '-inventory-v1', digest(declarations)),)
+    if name == 'source' and profile.get('generated_source'):
+        assets += (Asset('generated-source-v1', digest(profile['generated_source'])),)
+    return assets
 
 
 def native_options(profile):
