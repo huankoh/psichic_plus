@@ -191,6 +191,7 @@ def validate_native(receipt, staging):
     if record["status"] == State.FAILED.value:
         return
     if receipt.task.engine is Engine.BOLTZ:
+        read_document(staging, paths["native_affinity"])
         native = parse_affinity(Path(staging) / paths["native_affinity"],
                                 Candidate(1, "", receipt.task.fingerprint.submitted_smiles))
         expected = {"status": "succeeded", "affinity_pred_value": native.affinity_pred_value,
@@ -232,10 +233,16 @@ def stage_receipt(run_path, transfer):
     write_file(staging / "receipt.json", receipt.to_json() + "\n")
     for artifact in receipt.artifacts:
         destination = staging / artifact.sha256
-        if destination.exists():
+        owned = run_path / "blobs" / artifact.sha256
+        if destination.exists() or owned.exists():
             with open_relative(transfer, artifact.path) as source:
                 if os.fstat(source.fileno()).st_size != artifact.size or hashlib.file_digest(source, "sha256").hexdigest() != artifact.sha256:
                     raise ContractError("Transferred shared artifact digest/size mismatch")
+            if not destination.exists():
+                with open_relative(run_path, f"blobs/{artifact.sha256}") as stored:
+                    if os.fstat(stored.fileno()).st_size != artifact.size or hashlib.file_digest(stored, "sha256").hexdigest() != artifact.sha256:
+                        raise ContractError("Coordinator-owned immutable artifact was modified")
+                os.link(owned, destination)
             continue
         checksum, size = hashlib.sha256(), 0
         with open_relative(transfer, artifact.path) as source, destination.open("xb") as out:

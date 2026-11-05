@@ -218,6 +218,10 @@ class Settings:
     replicas: int = 1
 
     def __post_init__(self):
+        if self.ensemble is not None and not isinstance(self.ensemble, EnsembleMethod):
+            raise ContractError("Use a typed ensemble method")
+        if self.metric is not None and not isinstance(self.metric, Metric):
+            raise ContractError("Use a typed Boltz metric")
         if type(self.replicas) is not int or self.replicas != 1:
             raise ContractError("Only one replica is supported; replica aggregation needs a separate contract")
         object.__setattr__(self, "psichic_output", Output(self.psichic_output))

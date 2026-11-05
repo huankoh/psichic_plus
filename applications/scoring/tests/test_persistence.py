@@ -244,3 +244,106 @@ os._exit(73)
     reopened = ScoringRun.open(run.path)
     assert [d.state for d in reopened.diagnostics()] == [State.SUCCEEDED, State.SUBMITTED]
     assert not reopened.pending(Engine.PSICHIC)
+
+
+@pytest.mark.parametrize("field,replacement", [
+    ("precision", "float64"), ("device", "different-device"), ("call_profile", "changed-profile"),
+    ("parser_contract", "raw-v2"), ("engine_version", "different-version"),
+])
+def test_execution_profile_cannot_drift_between_batches(make_run, field, replacement):
+    run = make_run(n=2)
+    prepare(run, limit=1)
+    rows = run.pending(Engine.PSICHIC, limit=1)
+    key, fingerprint = declarations(run, rows, Engine.PSICHIC)[0]
+    with pytest.raises(ContractError, match="profile changed"):
+        run.prepare(Engine.PSICHIC, [(key, replace(fingerprint, **{field: replacement}))], ownership=Ownership.LOCAL)
+    assert len(run.pending(Engine.PSICHIC)) == 1
+
+
+@pytest.mark.parametrize("weight,other", [(float('nan'), 1), (float('inf'), 1), (-1, 1), (0, 0), (1e308, 1e308), (True, 1)])
+def test_rank_weights_reject_nonfinite_negative_zero_or_overflow(make_run, weight, other):
+    from applications.scorer.boltz2.models import EnsembleMethod
+    with pytest.raises(ValueError):
+        make_run("full-ensemble", ensemble=EnsembleMethod.RANK, psichic_weight=weight, boltz_weight=other)
+
+
+def test_mutated_raw_psichic_values_and_nested_symlink_rejected(make_run, tmp_path):
+    run = make_run(n=1, psichic_output=Output.DISTRIBUTION)
+    task, = prepare(run)
+    directory = transfer(tmp_path / "native-tamper", task)
+    value = json.loads((directory / "receipt.json").read_text())
+    value["record"]["raw_affinity"] = 9
+    value["record"]["adaptive_score"] = -9
+    value["record"]["distribution"] = {"state": "valid", "alpha": 6, "beta": 2, "concentration": 8}
+    (directory / "receipt.json").write_text(json.dumps(value))
+    with pytest.raises(ContractError, match="Native PSICHIC"):
+        run.accept(directory)
+    directory = transfer(tmp_path / "symlink-parent", task)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (directory / "raw.json").rename(outside / "raw.json")
+    (directory / "nested").symlink_to(outside, target_is_directory=True)
+    value = json.loads((directory / "receipt.json").read_text())
+    next(a for a in value["artifacts"] if a["role"] == "raw_psichic")["path"] = "nested/raw.json"
+    (directory / "receipt.json").write_text(json.dumps(value))
+    with pytest.raises(OSError):
+        run.accept(directory)
+    assert next(run.diagnostics()).state is State.SUBMITTED
+
+
+def test_exact_row_and_attempt_mismatch_cannot_replace_missing_identity(make_run, tmp_path):
+    run = make_run(n=2)
+    first, second = prepare(run)
+    forged = replace(first, entry_key=second.entry_key)
+    with pytest.raises(ContractError, match="exact expected"):
+        run.accept(transfer(tmp_path / "wrong-row", forged))
+    forged = replace(first, run_id="0" * 32)
+    with pytest.raises(ContractError, match="exact expected"):
+        run.accept(transfer(tmp_path / "wrong-run", forged))
+    forged = replace(first, population_digest="0" * 64)
+    with pytest.raises(ContractError, match="exact expected"):
+        run.accept(transfer(tmp_path / "wrong-population", forged))
+    assert [d.state for d in run.diagnostics()] == [State.SUBMITTED, State.SUBMITTED]
+
+
+@pytest.mark.parametrize("mode,expected", [("pyramid-ensemble", SelectionState.SHORTAGE), ("pyramid-refinement", SelectionState.COMMITTED)])
+def test_concentration_shortlist_requires_distribution_refinement_keeps_affinity(make_run, tmp_path, mode, expected):
+    run = make_run(mode, n=2, shortlist_size=2, psichic_output=Output.DISTRIBUTION)
+    first, second = prepare(run)
+    run.accept(transfer(tmp_path / "rich", first))
+    run.accept(transfer(tmp_path / "affinity-with-failed-distribution", second, alpha=None, beta=None, distribution_failure=True))
+    assert run.select().state is expected
+    assert len(run.pending(Engine.BOLTZ)) == (0 if expected is SelectionState.SHORTAGE else 2)
+
+
+def test_truncated_receipt_cannot_become_terminal(make_run, tmp_path):
+    run = make_run(n=1)
+    task, = prepare(run)
+    directory = transfer(tmp_path / "truncated", task)
+    full = (directory / "receipt.json").read_bytes()
+    (directory / "receipt.json").write_bytes(full[:len(full)//2])
+    with pytest.raises(ContractError):
+        run.accept(directory)
+    assert next(run.diagnostics()).state is State.SUBMITTED
+    (directory / "receipt.json").write_bytes(full)
+    assert run.accept(directory) is Acceptance.ACCEPTED
+
+
+@pytest.mark.parametrize("override", [{"ensemble": ""}, {"ensemble": "rank-v1"}, {"metric": ""}, {"replicas": 2}])
+def test_settings_reject_ambiguous_or_unsupported_declarations(make_run, override):
+    with pytest.raises(ContractError):
+        make_run("full-ensemble", **override)
+
+
+def test_shared_invocation_artifacts_retain_one_owned_inode(make_run, tmp_path):
+    run = make_run(n=2)
+    tasks = prepare(run)
+    for i, task in enumerate(tasks):
+        run.accept(transfer(tmp_path / f"shared-{i}", task))
+    receipt = Receipt.from_json((tmp_path / "shared-0/receipt.json").read_text())
+    execution = next(a for a in receipt.artifacts if a.role == "execution")
+    owned = run.path / "blobs" / execution.sha256
+    links = list((run.path / "staging").glob(f"*/{execution.sha256}"))
+    assert len(links) == 2
+    assert all(path.stat().st_ino == owned.stat().st_ino for path in links)
+    assert owned.read_bytes() == (tmp_path / "shared-0/execution.json").read_bytes()

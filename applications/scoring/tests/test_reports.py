@@ -184,7 +184,8 @@ def test_shortlist_ties_no_backfill_after_failure(make_run, tmp_path):
     run = make_run("pyramid-refinement", n=4, shortlist_size=2)
     for task in reversed(prepare(run)):
         run.accept(transfer(tmp_path / f"p{task.entry_key}", task))
-    run.select()
+    selected = run.select()
+    assert selected.eligible == 4 and run.select() == selected
     tasks = prepare(run, Engine.BOLTZ)
     assert [t.entry_key for t in tasks] == ["row_000000000001", "row_000000000002"]
     for i, task in enumerate(tasks):
@@ -194,3 +195,13 @@ def test_shortlist_ties_no_backfill_after_failure(make_run, tmp_path):
     assert [r["selected"] for r in run.results()] == [True, True, False, False]
     with pytest.raises(StateError):
         run.retry(tasks[1].entry_key, Engine.PSICHIC)
+
+
+def test_extreme_finite_boltz_affinities_normalize_without_overflow(make_run, tmp_path):
+    run = make_run("full-ensemble", n=2)
+    for task in prepare(run):
+        run.accept(transfer(tmp_path / f"p{task.entry_key}", task))
+    for task, value in zip(prepare(run, Engine.BOLTZ), [-1e308, 1e308]):
+        run.accept(transfer(tmp_path / f"b{task.entry_key}", task, boltz=value))
+    run.finalize()
+    assert [r["score"] for r in run.results()] == [.8125, .1875]

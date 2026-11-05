@@ -170,7 +170,8 @@ class ScoringRun:
                                     "target": asdict(target), "settings": asdict(settings),
                                     "population_digest": population.hexdigest(), "row_count": count,
                                     "host": socket.gethostname(), "storage": storage,
-                                    "selection": "waiting" if settings.pyramid else "committed"}.items():
+                                    "selection": "waiting" if settings.pyramid else "committed",
+                                    "selection_eligible": 0 if settings.pyramid else count}.items():
                     run._set(db, name, value)
                 if not settings.pyramid:
                     db.execute("INSERT INTO selection SELECT ordinal FROM entries")
@@ -250,6 +251,15 @@ class ScoringRun:
                     raise ContractError("Fingerprint input, target, or engine differs from frozen population")
                 if fingerprint.resolved_options != getattr(self.settings, engine.value + "_options"):
                     raise ContractError("Fingerprint differs from frozen resolved settings")
+                profile = asdict(fingerprint)
+                for varying in ("submitted_smiles", "native_input_sha256", "batch"):
+                    del profile[varying]
+                profile_name = engine.value + "_execution_profile"
+                recorded = db.execute("SELECT value FROM meta WHERE name=?", (profile_name,)).fetchone()
+                if recorded is None:
+                    self._set(db, profile_name, profile)
+                elif canonical(profile) != recorded[0]:
+                    raise ContractError("Execution profile changed within the run; create a new run")
                 required = self.settings.required_output if engine is Engine.PSICHIC else Output.AFFINITY
                 if fingerprint.output != required:
                     raise ContractError("Fingerprint output does not satisfy the run")
@@ -365,7 +375,7 @@ class ScoringRun:
         count = db.execute("SELECT count(*) FROM selection").fetchone()[0]
         if self._get(db, "selection") == "committed":
             db.execute("COMMIT")
-            return Selection(SelectionState.COMMITTED, count, self.settings.shortlist_size or count, count)
+            return Selection(SelectionState.COMMITTED, self._get(db, "selection_eligible"), self.settings.shortlist_size or count, count)
         required = self.settings.shortlist_size
         unresolved = db.execute("SELECT count(*) FROM evaluations WHERE engine='psichic' AND state NOT IN ('succeeded','failed')").fetchone()[0]
         if unresolved:
@@ -374,6 +384,7 @@ class ScoringRun:
         condition = " AND r.distribution='valid'" if self.settings.ensemble is EnsembleMethod.CONCENTRATION else ""
         eligible = "SELECT v.ordinal,r.p FROM evaluations v JOIN receipts r ON r.digest=v.accepted WHERE v.engine='psichic' AND r.status='succeeded'" + condition
         available = db.execute(f"SELECT count(*) FROM ({eligible})").fetchone()[0]
+        self._set(db, "selection_eligible", available)
         if available < required:
             self._set(db, "selection", "shortage")
             db.execute("COMMIT")

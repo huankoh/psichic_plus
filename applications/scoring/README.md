@@ -2,6 +2,8 @@
 
 `applications.scoring` owns a saved population and its accepted observations.
 It does not invoke models, submit scheduler jobs, or own a GPU.
+The coordinator requires Python 3.11 or newer and SQLite with JSON, generated columns, and window functions.
+This unit is verified on Python 3.12.15 and SQLite 3.53.4.
 The original `applications.scorer.boltz2` interface and its `rank-v1` default remain independent.
 
 Create a run with `ScoringRun.create(path, entries, target=target, settings=settings)`.
@@ -63,6 +65,7 @@ The receipt still binds every role, path, size, and digest to the exact task.
 `staging/` retains incomplete imports and publication remnants as evidence.
 No automatic cleanup or garbage collection runs.
 
+See [the format reference](FORMAT.md) and [the executor and AFVS guide](ADAPTERS.md).
 Run the controlled CPU tests with `python -m pytest applications/scoring/tests` from the repository root.
 The synthetic receipts are explicitly labeled fixtures and do not claim model inference.
 
