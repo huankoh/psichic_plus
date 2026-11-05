@@ -1,0 +1,11 @@
+**
+!applications/
+!applications/scorer/
+!applications/scorer/**
+**/__pycache__/
+**/*.py[cod]
+**/tests/
+**/runs/
+**/.audit/
+**/weights/
+**/.venv/

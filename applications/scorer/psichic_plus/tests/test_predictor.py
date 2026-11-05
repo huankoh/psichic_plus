@@ -48,7 +48,7 @@ def test_real_predictor_preserves_ids_and_honors_device(tmp_path, device):
         gpu_baseline = torch.cuda.memory_allocated()
         torch.cuda.reset_peak_memory_stats()
 
-    fasta = Path(__file__).resolve().parents[2] / "generator/example/target.fasta"
+    fasta = Path(__file__).resolve().parents[3] / "generator/example/target.fasta"
     predictor = Predictor(str(fasta), model_dir, device, str(tmp_path), 2)
     inputs = [
         ("None", "CNc1ccccc1"),

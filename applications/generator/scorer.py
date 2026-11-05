@@ -17,7 +17,7 @@ class PSICHICScorer:
     def __call__(self, smiles: str) -> float:
         try:
             if self.predictor is None:
-                from applications.scorer.predictor import Predictor
+                from applications.scorer.psichic_plus.predictor import Predictor
 
                 self.predictor = Predictor(
                     str(self.target_fasta), str(self.model_dir), self.device,
