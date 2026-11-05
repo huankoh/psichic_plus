@@ -32,8 +32,14 @@ python3.12 -m venv /opt/boltz
 
 Supply the PSICHIC model directory containing `config.json`, `degree.pt`, and `model.pt`.
 Supply `esm2_t33_650M_UR50D.pt` beside `esm2_t33_650M_UR50D-contact-regression.pt`.
-Preflight hashes both ESM checkpoints and loads ESM through its local-file API.
+Preflight hashes both ESM checkpoints.
+Execution reads them with PyTorch's restricted `weights_only=True` loader, allowing only the checkpoint's `argparse.Namespace` configuration class in a scoped context, then calls ESM's native model constructor.
 No missing model is downloaded.
+
+When running in Docker, use the same explicit `--hostname` for creation, status, and resume containers on the same physical host, and mount the saved run at the same path.
+For example, use `--hostname psichic-huan-main-a100` consistently on this host.
+The default random container hostname will fail the saved run's same-host check.
+An explicit hostname does not authorize moving the run between machines or using an unqualified shared filesystem.
 
 ```sh
 export PSICHIC_MODEL_DIR=/data/weights/PSICHIC_plus

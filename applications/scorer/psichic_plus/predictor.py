@@ -1,4 +1,5 @@
 import importlib.util
+from argparse import Namespace
 from dataclasses import dataclass
 import gc
 import math
@@ -54,15 +55,28 @@ def load_helpers():
     return helpers
 
 
+def _load_local_esm(pretrained, checkpoint):
+    import torch
+
+    checkpoint = Path(checkpoint)
+    # ESM checkpoints store configuration as Namespace alongside tensor weights.
+    with torch.serialization.safe_globals([Namespace]):
+        model_data = torch.load(checkpoint, map_location="cpu", weights_only=True)
+        regression_data = torch.load(checkpoint.with_name(checkpoint.stem + "-contact-regression.pt"),
+                                     map_location="cpu", weights_only=True)
+    return pretrained.load_model_and_alphabet_core(checkpoint.stem, model_data, regression_data)
+
+
 def _protein_state(fasta, device):
     import featurizers
     import torch
 
     _, sequence = fasta
     esm_checkpoint = os.environ.get("PSICHIC_ESM_CHECKPOINT")
-    model, alphabet = featurizers.esm.pretrained.load_model_and_alphabet(
-        str(esm_checkpoint) if esm_checkpoint is not None else "esm2_t33_650M_UR50D",
-    )
+    if esm_checkpoint is not None:
+        model, alphabet = _load_local_esm(featurizers.esm.pretrained, esm_checkpoint)
+    else:
+        model, alphabet = featurizers.esm.pretrained.load_model_and_alphabet("esm2_t33_650M_UR50D")
     model.eval()
     model.to(device)
     sequence = featurizers.replace_non_standard_residues(sequence, featurizers.pro_res_table)
