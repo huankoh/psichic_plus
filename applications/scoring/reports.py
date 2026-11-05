@@ -249,10 +249,18 @@ def _publish(run, db, row, top_n):
     db.execute("BEGIN IMMEDIATE")
     db.execute("UPDATE reports SET state='published' WHERE version=?", (report.version,))
     db.execute("COMMIT")
-    newest = db.execute("SELECT version,snapshot FROM reports WHERE state='published' ORDER BY version DESC LIMIT 1").fetchone()
-    atomic_pointer(run.path / "latest.json", {"schema_version": 1, "version": newest["version"],
-                                            "snapshot_digest": newest["snapshot"], "directory": f"reports/v{newest['version']:08d}"})
+    _repair_latest(run, db)
     return report
+
+
+def _repair_latest(run, db):
+    newest = db.execute("SELECT version,snapshot FROM reports WHERE state='published' ORDER BY version DESC LIMIT 1").fetchone()
+    if newest is None:
+        return
+    pointer = {"schema_version": 1, "version": newest["version"], "snapshot_digest": newest["snapshot"],
+               "directory": f"reports/v{newest['version']:08d}"}
+    if not (run.path / "latest.json").exists() or read_document(run.path, "latest.json") != pointer:
+        atomic_pointer(run.path / "latest.json", pointer)
 
 
 def finalize(run, *, top_n):
@@ -261,6 +269,7 @@ def finalize(run, *, top_n):
     with run._locked() as db:
         for interrupted in db.execute("SELECT * FROM reports WHERE state='building' ORDER BY version"):
             _publish(run, db, interrupted, top_n)
+        _repair_latest(run, db)
         selection = run._select(db)
         unresolved = dict(db.execute("SELECT state,count(*) FROM evaluations WHERE state NOT IN ('succeeded','failed') GROUP BY state"))
         if unresolved:

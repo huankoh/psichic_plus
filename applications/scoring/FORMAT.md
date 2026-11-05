@@ -181,4 +181,5 @@ Publication orders the durable database snapshot, fsynced temporary files, atomi
 Reopening can finish publication without replacing any previous version.
 Finalization first publishes committed interrupted snapshots, even if current observations changed or are still pending.
 The latest pointer always names the highest published version.
+Finalization repairs a missing or stale pointer before checking pending work, including a crash after the published database marker was committed.
 Unfinished populations return diagnostics rather than a final global ranking.

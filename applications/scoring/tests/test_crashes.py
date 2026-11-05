@@ -98,7 +98,8 @@ def test_sigkill_after_copy_before_receipt_acceptance_can_reimport(make_run, tmp
 
 
 @pytest.mark.parametrize("complete_retry", [False, True])
-def test_interrupted_snapshot_publishes_after_observations_change(make_run, tmp_path, complete_retry):
+@pytest.mark.parametrize("boundary", ["report-directory", "latest-pointer"])
+def test_interrupted_snapshot_publishes_after_observations_change(make_run, tmp_path, complete_retry, boundary):
     run = make_run(n=3)
     tasks = prepare(run)
     for index, task in enumerate(tasks):
@@ -108,7 +109,7 @@ def test_interrupted_snapshot_publishes_after_observations_change(make_run, tmp_
     run.retry(tasks[1].entry_key, Engine.PSICHIC)
     retry, = prepare(run)
     run.accept(transfer(tmp_path / "second", retry, affinity=8))
-    kill_at_boundary(run, "report-directory")
+    kill_at_boundary(run, boundary)
     run = ScoringRun.open(run.path)
     run.retry(tasks[2].entry_key, Engine.PSICHIC)
     if complete_retry:
@@ -116,6 +117,9 @@ def test_interrupted_snapshot_publishes_after_observations_change(make_run, tmp_
         run.accept(transfer(tmp_path / "third", retry, affinity=9))
     run.finalize()
     assert [row["score"] for row in run.results(2)] == [6, 8, None]
+    assert run.latest().version == (3 if complete_retry else 2)
+    assert list(run.results()) == list(run.results(run.latest().version))
+    run.finalize()
     assert run.latest().version == (3 if complete_retry else 2)
     assert file_hashes(first.directory) == original
 
