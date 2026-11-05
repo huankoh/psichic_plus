@@ -10,7 +10,7 @@ from applications.scoring import (
     Acceptance, ContractError, Engine, Entry, Fingerprint, IncompleteRun, Ownership, Receipt,
     Resolution, RunBusy, ScoringRun, SelectionState, Settings, State, StateError, Task,
 )
-from conftest import declarations, prepare, transfer
+from .conftest import declarations, prepare, transfer
 
 
 def test_streamed_population_identity_and_creation(make_run, tmp_path, target):

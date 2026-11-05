@@ -65,3 +65,40 @@ No automatic cleanup or garbage collection runs.
 
 Run the controlled CPU tests with `python -m pytest applications/scoring/tests` from the repository root.
 The synthetic receipts are explicitly labeled fixtures and do not claim model inference.
+
+## Finalize and read reports
+
+Call `finalize(top_n=20)` after ingesting available receipts.
+It returns `Waiting(pending, submitted, unknown)` while any expected outcome remains unresolved.
+No final ranking is published in that state.
+A terminal population returns `Report(version, report_id, status, directory, accepted_receipt_digest)`.
+The status is `complete`, `partial`, or `shortage`.
+Failures remain visible without numeric penalties.
+
+`results(version=None)` streams stored report records in manifest order.
+`latest()` returns the current published report, or `None` before the first publication.
+Each record has a separate `position` for human display and `final_rank` for average-tie ranking.
+Raw outcomes, original source metadata, expected attempt IDs, accepted receipts, and content-addressed artifact links accompany every row.
+`results.json`, `results.csv`, and the bounded `summary.md` come from that same stored snapshot.
+JSON never emits NaN.
+
+The new `Settings` defaults ensemble modes to `concentration-v1`.
+Pass `ensemble=EnsembleMethod.RANK` to request `rank-v1` with finite nonnegative weights whose sum is positive and finite.
+PSICHIC-only needs no Boltz options.
+The four standalone `Plan` modes and defaults remain unchanged.
+
+Ranking joins accepted outcomes on disk and uses SQLite window functions and file-backed temporary sorting.
+Ensemble normalization and component ranks use only the selected cohort successful on both engines.
+Concentration also requires a valid PSICHIC distribution.
+Its Boltz affinity is negated before normalization.
+Scalar numerical rules are shared with the standalone scorer.
+Constant series normalize to 0.5, and singleton or tied cohorts retain their calculated ranks with warnings.
+Report rows remain in manifest order, with ties displayed in manifest order.
+
+`reports/v00000001/` and subsequent versions are immutable.
+Finalization commits a database snapshot before writing a temporary report directory.
+It fsyncs the report files and directory, renames the directory, and then atomically replaces `latest.json`.
+An interrupted publication can resume from the stored snapshot without changing the previous report.
+Temporary directories remain as evidence.
+No-change finalization returns the existing version.
+An explicit retry that changes the successful cohort publishes a new version because every normalized score or rank can change.

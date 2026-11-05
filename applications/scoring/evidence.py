@@ -204,7 +204,7 @@ def validate_native(receipt, staging):
     if type(raw["schema_version"]) is not int or raw["schema_version"] != SCHEMA or Task.from_dict(raw["task"]) != receipt.task:
         raise ContractError("Raw PSICHIC output has wrong task identity")
     native = raw["native"]
-    if not isinstance(native, dict) or native.get("predicted_binding_affinity") != record["raw_affinity"]:
+    if not isinstance(native, dict) or not finite_number(native.get("predicted_binding_affinity")) or native["predicted_binding_affinity"] != record["raw_affinity"]:
         raise ContractError("Native PSICHIC affinity differs from receipt")
     d = record["distribution"]
     if d["state"] == "not-requested":

@@ -11,6 +11,7 @@ import sqlite3
 import uuid
 
 from applications.scorer import Output
+from applications.scorer.boltz2.models import EnsembleMethod
 
 from .contracts import (
     Acceptance, BatchContext, ContractError, Engine, Entry, Fingerprint, IncompleteRun, ManifestRow,
@@ -308,7 +309,7 @@ class ScoringRun:
                 raise StateError("Explicit retry requires a recorded engine or distribution failure")
             db.execute("UPDATE evaluations SET state='pending',expected=NULL,accepted=NULL,stopped=0 WHERE ordinal=? AND engine=?",
                        (int(entry_key[4:]), engine.value))
-            if self.settings.pyramid:
+            if self.settings.pyramid and engine is Engine.PSICHIC:
                 self._set(db, "selection", "waiting")
             db.execute("COMMIT")
 
@@ -357,25 +358,40 @@ class ScoringRun:
 
     def select(self):
         with self._locked() as db:
-            db.execute("BEGIN IMMEDIATE")
-            count = db.execute("SELECT count(*) FROM selection").fetchone()[0]
-            if self._get(db, "selection") == "committed":
-                return Selection(SelectionState.COMMITTED, count, self.settings.shortlist_size or count, count)
-            required = self.settings.shortlist_size
-            unresolved = db.execute("SELECT count(*) FROM evaluations WHERE engine='psichic' AND state NOT IN ('succeeded','failed')").fetchone()[0]
-            if unresolved:
-                return Selection(SelectionState.WAITING, 0, required, 0)
-            from applications.scorer.boltz2.models import EnsembleMethod
-            condition = " AND r.distribution='valid'" if self.settings.ensemble is EnsembleMethod.CONCENTRATION else ""
-            eligible = "SELECT v.ordinal,r.p FROM evaluations v JOIN receipts r ON r.digest=v.accepted WHERE v.engine='psichic' AND r.status='succeeded'" + condition
-            available = db.execute(f"SELECT count(*) FROM ({eligible})").fetchone()[0]
-            if available < required:
-                self._set(db, "selection", "shortage")
-                db.execute("COMMIT")
-                return Selection(SelectionState.SHORTAGE, available, required, 0)
-            db.execute(f"INSERT INTO selection SELECT ordinal FROM ({eligible}) ORDER BY p DESC,ordinal LIMIT ?", (required,))
-            db.execute("INSERT INTO evaluations(ordinal,engine,state) SELECT ordinal,'boltz','pending' FROM selection")
-            self._set(db, "selection", "committed")
-            db.execute("COMMIT")
-            return Selection(SelectionState.COMMITTED, available, required, required)
+            return self._select(db)
 
+    def _select(self, db):
+        db.execute("BEGIN IMMEDIATE")
+        count = db.execute("SELECT count(*) FROM selection").fetchone()[0]
+        if self._get(db, "selection") == "committed":
+            db.execute("COMMIT")
+            return Selection(SelectionState.COMMITTED, count, self.settings.shortlist_size or count, count)
+        required = self.settings.shortlist_size
+        unresolved = db.execute("SELECT count(*) FROM evaluations WHERE engine='psichic' AND state NOT IN ('succeeded','failed')").fetchone()[0]
+        if unresolved:
+            db.execute("COMMIT")
+            return Selection(SelectionState.WAITING, 0, required, 0)
+        condition = " AND r.distribution='valid'" if self.settings.ensemble is EnsembleMethod.CONCENTRATION else ""
+        eligible = "SELECT v.ordinal,r.p FROM evaluations v JOIN receipts r ON r.digest=v.accepted WHERE v.engine='psichic' AND r.status='succeeded'" + condition
+        available = db.execute(f"SELECT count(*) FROM ({eligible})").fetchone()[0]
+        if available < required:
+            self._set(db, "selection", "shortage")
+            db.execute("COMMIT")
+            return Selection(SelectionState.SHORTAGE, available, required, 0)
+        db.execute(f"INSERT INTO selection SELECT ordinal FROM ({eligible}) ORDER BY p DESC,ordinal LIMIT ?", (required,))
+        db.execute("INSERT INTO evaluations(ordinal,engine,state) SELECT ordinal,'boltz','pending' FROM selection")
+        self._set(db, "selection", "committed")
+        db.execute("COMMIT")
+        return Selection(SelectionState.COMMITTED, available, required, required)
+
+    def finalize(self, *, top_n=20):
+        from .reports import finalize
+        return finalize(self, top_n=top_n)
+
+    def results(self, version=None):
+        from .reports import results
+        yield from results(self, version)
+
+    def latest(self):
+        from .reports import latest
+        return latest(self)

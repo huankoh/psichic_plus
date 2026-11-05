@@ -34,6 +34,8 @@ def make_run(tmp_path, target):
 
 
 def declarations(run, rows, engine):
+    if not rows:
+        return []
     batch = BatchContext.for_rows(rows, seed=42)
     return [(row.key, Fingerprint(
         engine, "2.2.1" if engine is Engine.BOLTZ else "controlled-v1", row.entry.smiles, run.target,
