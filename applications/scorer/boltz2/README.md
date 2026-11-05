@@ -6,7 +6,8 @@ The supported release is **Boltz 2.2.1**.
 The integration rejects other releases before prediction.
 
 The four workflows are `boltz-only`, `full-ensemble`, `pyramid-ensemble`, and `pyramid-refinement`.
-The ensemble combines ranks, not raw scores, and remains experimental.
+Ensemble modes offer `rank-v1` and `concentration-v1` and remain experimental.
+Omitting `--ensemble` preserves the existing `rank-v1` standalone default.
 Read [ranking and input rules](REFERENCE.md) before interpreting results.
 See [verification evidence and limits](VERIFICATION.md) for what has actually run.
 The [GPU handoff](HANDOFF.md) describes the remaining checks on `huan-main-a100`.
@@ -77,7 +78,7 @@ python -m applications.scorer.boltz2 \
   -- --accelerator cpu --cache /data/cache/boltz
 ```
 
-Score all candidates with both engines and combine their ranks.
+Score all candidates with both engines and combine their ranks using `rank-v1`.
 
 ```bash
 python -m applications.scorer.boltz2 \
@@ -87,6 +88,28 @@ python -m applications.scorer.boltz2 \
   --psichic-weight 1 --boltz-weight 1 --output /data/results/full-ensemble \
   -- --accelerator cpu --cache /data/cache/boltz
 ```
+
+Use the source concentration ensemble explicitly.
+It requests PSICHIC+ distribution output internally and uses native Boltz affinity, even when `--psichic-output` is omitted.
+
+```bash
+python -m applications.scorer.boltz2 \
+  --mode full-ensemble --ensemble concentration-v1 \
+  --candidates /data/screen/molecules.csv --fasta /data/screen/target.fasta \
+  --msa-mode single --model-dir /data/weights/PSICHIC_plus \
+  --output /data/results/concentration-ensemble \
+  -- --accelerator cpu --cache /data/cache/boltz
+```
+
+For a shortlist concentration ensemble, use `--mode pyramid-ensemble --shortlist-size 20 --ensemble concentration-v1`.
+That shortlist requires 20 valid affinity and distribution results before Boltz starts.
+`concentration-v1` rejects `--rank-by affinity_probability_binary` and either manual weight option, including an explicitly supplied weight of 1.
+Its `normalized_ensemble_score` is a relative score with larger values better, not a calibrated affinity.
+The existing lower-better `experimental_combined_value` remains exclusive to `rank-v1`.
+
+`--psichic-output distribution` also retains distribution parameters in rank ensemble or refinement reports without changing their affinity-only selection rules.
+A requested distribution failure retains valid affinity, records the failure, and marks the run partial.
+Both methods reproduce software rules; these checks do not establish scientific ranking accuracy.
 
 Select the top 20 successful PSICHIC+ rows, then combine both engines' ranks within their common successful shortlist.
 Provide at least 20 candidates that PSICHIC+ can score, or choose a smaller shortlist.

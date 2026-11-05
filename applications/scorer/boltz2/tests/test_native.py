@@ -225,6 +225,14 @@ def test_cli_four_modes_with_controlled_engines(mode, fake_boltz, fasta, tmp_pat
     assert sum(r["boltz"]["status"] == "success" for r in records) == (2 if mode.pyramid else 3)
     manifest = json.loads((output / "manifest.json").read_text())
     assert manifest["status"] == "complete"
+    if mode.ensemble:
+        assert manifest["ensemble"]["method"] == "rank-v1"
+        assert manifest["ensemble"]["direction"] == "ascending"
+        assert manifest["ranking"]["ensemble"] == (
+            "experimental weighted mean of ranks within the both-successful cohort; lower is better"
+        )
+        assert all(record["normalized_ensemble_score"] is None for record in records)
+        assert any(record["experimental_combined_value"] is not None for record in records)
     if mode is not Mode.BOLTZ:
         assert manifest["psichic"]["source"]["screening_directory"] == str(fasta.parent)
         assert manifest["engines"]["psichic"]["source"]["source_sha256"]
@@ -237,3 +245,159 @@ def test_csv_ids_are_strings_even_when_they_look_missing(tmp_path):
     path = tmp_path / "rows.csv"
     path.write_text('ID,SMILES\nNone,CCO\nnan,CCN\n,CCC\n001,CCO\n')
     assert [row.id for row in read_candidates(path)] == ["None", "nan", "", "001"]
+
+
+@pytest.mark.parametrize("mode,options", [
+    ("full-ensemble", ["--ensemble", "concentration-v1", "--rank-by", "affinity_probability_binary"]),
+    ("full-ensemble", ["--ensemble", "concentration-v1", "--psichic-weight", "1.0"]),
+    ("full-ensemble", ["--ensemble", "concentration-v1", "--boltz-weight", "1.0"]),
+    ("pyramid-refinement", ["--shortlist-size", "1", "--ensemble", "rank-v1"]),
+    ("boltz-only", ["--ensemble", "concentration-v1"]),
+    ("boltz-only", ["--psichic-output", "affinity"]),
+    ("boltz-only", ["--psichic-output", "distribution"]),
+    ("boltz-only", ["--psichic-weight", "1.0"]),
+])
+def test_cli_rejects_incompatible_explicit_options_before_engine_or_output(mode, options, fasta, tmp_path, capsys):
+    output = tmp_path / "rejected"
+    assert main(["--mode", mode, "--candidates", "/unused.csv", "--fasta", str(fasta), "--msa-mode", "single",
+                 "--output", str(output), *options]) == 2
+    assert "Configuration error" in capsys.readouterr().err
+    assert not output.exists()
+
+
+@pytest.mark.parametrize("mode,distribution_failure", [("full-ensemble", False), ("pyramid-ensemble", False),
+                                                       ("full-ensemble", True), ("pyramid-ensemble", True)])
+def test_module_cli_concentration_with_bounded_controlled_engines(mode, distribution_failure, fake_boltz, fasta, tmp_path):
+    import csv
+    import subprocess
+    import sys
+
+    candidates = tmp_path / "candidates.csv"
+    candidates.write_text("ID,SMILES\nsame,CCO\nsame,CCO\n,CCN\n")
+    (tmp_path / "inference.py").write_text("controlled_scorer = True\n")
+    output = tmp_path / "module-output"
+    bootstrap = '''
+import runpy
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path.cwd()))
+from types import SimpleNamespace
+from applications.scorer import BetaDistribution, DistributionFailure, Output, Success
+from applications.scorer.psichic_plus import predictor
+source = Path(sys.argv.pop(1))
+fault = sys.argv.pop(1) == "True"
+class ControlledPredictor:
+    def __init__(self, *args):
+        self.helpers = SimpleNamespace(__file__=str(source))
+    def score(self, pairs, *, output):
+        assert output is Output.DISTRIBUTION
+        outcomes = []
+        for index, (key, _) in enumerate(pairs):
+            alpha, beta = [(1, 3), (4, 4), (12, 4)][index]
+            distribution = (DistributionFailure("controlled invalid distribution", "bad", "4")
+                            if fault and index == 2 else BetaDistribution(alpha, beta))
+            affinity = 12 * alpha / (alpha + beta)
+            outcomes.append(Success(key, affinity, -affinity, distribution))
+        return outcomes
+predictor.Predictor = ControlledPredictor
+runpy.run_module("applications.scorer.boltz2", run_name="__main__")
+'''
+    bootstrap_path = tmp_path / "controlled_cli.py"
+    bootstrap_path.write_text(bootstrap)
+    command = [sys.executable, str(bootstrap_path), str(tmp_path / "inference.py"), str(distribution_failure),
+               "--mode", mode, "--ensemble", "concentration-v1", "--candidates", str(candidates),
+               "--fasta", str(fasta), "--msa-mode", "single", "--model-dir", str(tmp_path),
+               "--boltz-python", str(fake_boltz), "--boltz-timeout", "5", "--output", str(output)]
+    if mode == "pyramid-ensemble":
+        command += ["--shortlist-size", "3"]
+    command += ["--", "--accelerator", "cpu"]
+    completed = subprocess.run(command, capture_output=True, text=True, timeout=20)
+    (tmp_path / "cli-stdout.log").write_text(completed.stdout)
+    (tmp_path / "cli-stderr.log").write_text(completed.stderr)
+    assert completed.returncode == int(distribution_failure), completed.stderr
+    manifest = json.loads((output / "manifest.json").read_text())
+    records = json.loads((output / "results.json").read_text())
+    csv_records = list(csv.DictReader((output / "results.csv").open()))
+    assert [r["candidate"]["id"] for r in records] == ["same", "same", ""]
+    assert manifest["plan"]["ensemble"] == "concentration-v1"
+    assert manifest["plan"]["metric"] == "affinity_pred_value"
+    assert manifest["psichic"]["requested_output"] == "affinity"
+    assert manifest["psichic"]["required_output"] == "distribution"
+    assert manifest["ranking"]["ensemble_method"]["meaning"] == "relative normalized score, not a calibrated affinity"
+    assert manifest["ensemble"]["reference_commit"] == "00a44d9a99cac5dc35913b0f9e40ed9d82169896"
+    assert manifest["ensemble"]["direction"] == "descending"
+    assert all(record["experimental_combined_value"] is None for record in records)
+    assert csv_records[0]["ensemble_method"] == "concentration-v1"
+    assert csv_records[0]["psichic_alpha"] == "1"
+    assert csv_records[0]["psichic_concentration"] == "4"
+    if distribution_failure:
+        assert manifest["status"] == "partial"
+        assert records[2]["psichic"]["raw_affinity"] == 9
+        assert records[2]["psichic"]["distribution"]["state"] == "distribution-failure"
+        assert csv_records[2]["psichic_distribution_failure"] == "controlled invalid distribution"
+        assert csv_records[2]["psichic_raw_alpha"] == "bad"
+        assert records[2]["unranked_reason"] == "psichic_distribution_failed"
+    if distribution_failure and mode == "pyramid-ensemble":
+        assert "boltz" not in manifest["engines"]
+        assert not (output / "boltz/inputs").exists()
+        assert all(record["boltz"]["status"] == "not_run" for record in records)
+        assert not manifest["ensemble_cohort"]
+    else:
+        assert all(record["boltz"]["status"] == "success" for record in records)
+        assert len(manifest["ensemble_cohort"]) == (2 if distribution_failure else 3)
+        assert records[0]["normalized_ensemble_score"] == 0
+        assert records[1]["normalized_ensemble_score"] == (1.0 if distribution_failure else .5)
+        prepared = yaml.safe_load((output / "boltz/inputs/row_00000001.yaml").read_text())
+        assert prepared["sequences"][0]["protein"]["msa"] == "empty"
+
+
+def test_module_cli_boltz_only_subprocess(fake_boltz, fasta, tmp_path):
+    import subprocess
+    import sys
+
+    candidates = tmp_path / "candidates.csv"
+    candidates.write_text("ID,SMILES\none,CCO\n")
+    output = tmp_path / "boltz-module"
+    completed = subprocess.run([sys.executable, "-m", "applications.scorer.boltz2", "--mode", "boltz-only",
+                                "--candidates", str(candidates), "--fasta", str(fasta), "--msa-mode", "single",
+                                "--output", str(output), "--boltz-python", str(fake_boltz), "--boltz-timeout", "5",
+                                "--", "--accelerator", "cpu"], capture_output=True, text=True, timeout=20)
+    assert completed.returncode == 0, completed.stderr
+    assert json.loads((output / "results.json").read_text())[0]["final_rank"] == 1
+
+
+@pytest.mark.parametrize("mode", [Mode.ENSEMBLE, Mode.REFINEMENT])
+def test_cli_explicit_distribution_and_compatible_rank_options(mode, fake_boltz, fasta, tmp_path, monkeypatch):
+    from applications.scorer import BetaDistribution, Output
+    from applications.scorer.psichic_plus import predictor
+
+    class RichPredictor:
+        def __init__(self, *args):
+            self.helpers = SimpleNamespace(__file__=str(tmp_path / "inference.py"))
+
+        def score(self, pairs, *, output):
+            assert output is Output.DISTRIBUTION
+            return [Success(key, 6, -6, BetaDistribution(4, 4)) for key, _ in pairs]
+
+    (tmp_path / "inference.py").write_text("controlled_scorer = True\n")
+    monkeypatch.setattr(predictor, "Predictor", RichPredictor)
+    candidates = tmp_path / "candidates.csv"
+    candidates.write_text("ID,SMILES\nfirst,CCO\nsecond,CCN\n")
+    output = tmp_path / "rank-distribution"
+    args = ["--mode", mode.value, "--candidates", str(candidates), "--fasta", str(fasta), "--msa-mode", "single",
+            "--psichic-output", "distribution", "--model-dir", str(tmp_path), "--boltz-python", str(fake_boltz),
+            "--output", str(output)]
+    if mode.ensemble:
+        args += ["--ensemble", "rank-v1", "--rank-by", "affinity_probability_binary",
+                 "--psichic-weight", "1.0", "--boltz-weight", "1.0"]
+    else:
+        args += ["--shortlist-size", "2"]
+    assert main(args) == 0
+    manifest = json.loads((output / "manifest.json").read_text())
+    records = json.loads((output / "results.json").read_text())
+    assert manifest["psichic"]["required_output"] == "distribution"
+    assert all(record["psichic"]["distribution"]["state"] == "valid" for record in records)
+    assert all(record["normalized_ensemble_score"] is None for record in records)
+    assert [record["final_rank"] for record in records] == [2, 1]
+    if mode.ensemble:
+        assert [record["experimental_combined_value"] for record in records] == [1.75, 1.25]

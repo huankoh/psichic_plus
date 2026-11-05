@@ -14,8 +14,9 @@ import sys
 
 import yaml
 
+from applications.scorer import Output
 from .adapter import BoltzRunner
-from .models import Candidate, Metric, Mode, Plan
+from .models import Candidate, EnsembleMethod, Metric, Mode, OMITTED, Plan
 from .target import Target
 from .workflow import row_record, run_workflow, score_psichic
 
@@ -39,7 +40,7 @@ def read_candidates(path, id_column="ID", smiles_column="SMILES"):
 
 
 def parser():
-    result = argparse.ArgumentParser(description="Optional Boltz-2 scoring and experimental PSICHIC+ rank ensembles.")
+    result = argparse.ArgumentParser(description="Optional Boltz-2 scoring and experimental PSICHIC+ ensembles.")
     result.add_argument("--mode", required=True, choices=[mode.value for mode in Mode])
     result.add_argument("--candidates", required=True, type=Path)
     result.add_argument("--id-column", default="ID")
@@ -54,10 +55,14 @@ def parser():
     result.add_argument("--output", type=Path, required=True, help="A new run directory. Existing directories are rejected.")
     result.add_argument("--boltz-python", default=os.environ.get("BOLTZ_PYTHON"), help="Python in the separate Boltz 2.2.1 environment, with boltz in the same bin directory.")
     result.add_argument("--boltz-timeout", type=float, help="Optional timeout in seconds for the native prediction process.")
-    result.add_argument("--rank-by", choices=[metric.value for metric in Metric], default=Metric.PROBABILITY.value)
+    result.add_argument("--rank-by", choices=[metric.value for metric in Metric], default=OMITTED)
+    result.add_argument("--ensemble", choices=[method.value for method in EnsembleMethod], default=OMITTED,
+                        help="Ensemble method. Omitted ensemble modes retain rank-v1.")
+    result.add_argument("--psichic-output", choices=[output.value for output in Output], default=OMITTED,
+                        help="Output detail. concentration-v1 always requests distribution internally.")
     result.add_argument("--shortlist-size", type=int)
-    result.add_argument("--psichic-weight", type=float, default=1.0)
-    result.add_argument("--boltz-weight", type=float, default=1.0)
+    result.add_argument("--psichic-weight", type=float, default=OMITTED)
+    result.add_argument("--boltz-weight", type=float, default=OMITTED)
     result.add_argument("--model-dir", type=Path, help="Existing PSICHIC+ weights, required except in boltz-only mode.")
     result.add_argument("--psichic-device", default="cpu")
     result.add_argument("--psichic-cache", type=Path)
@@ -71,7 +76,10 @@ def _write_json(path, content):
 
 
 def execute(args):
-    plan = Plan(Mode(args.mode), args.shortlist_size, Metric(args.rank_by), args.psichic_weight, args.boltz_weight)
+    plan = Plan(Mode(args.mode), args.shortlist_size,
+                Metric(args.rank_by) if args.rank_by is not OMITTED else OMITTED,
+                args.psichic_weight, args.boltz_weight,
+                EnsembleMethod(args.ensemble) if args.ensemble is not OMITTED else OMITTED, args.psichic_output)
     if not args.boltz_python:
         raise ValueError("Provide --boltz-python or BOLTZ_PYTHON for the isolated environment")
     if args.batch_size < 1:
@@ -123,11 +131,23 @@ def execute(args):
         "python": sys.version, "packages": packages,
         "psichic": {"chain": protein[0] if protein else None, "model_dir": str(args.model_dir.absolute()) if args.model_dir else None,
                     "device": args.psichic_device, "batch_size": args.batch_size, "weights": weight_hashes,
+                    "requested_output": plan.psichic_output, "required_output": plan.required_psichic_output,
                     "chemical_representation": "Original SMILES submitted; normalized representation is not exposed by Predictor."},
         "ranking": {"boltz_field": plan.metric.value, "boltz_direction": "descending" if plan.metric.higher_is_better else "ascending",
                     "psichic_direction": "descending", "ties": "average ranks; shortlist boundary ties use input row order",
-                    "ensemble": "experimental weighted mean of ranks within the both-successful cohort; lower is better",
-                    "shortlist": "exactly K successful PSICHIC rows; no replenishment after Boltz failure"},
+                    "ensemble": ("relative concentration-weighted normalized score; higher is better"
+                                 if plan.ensemble is EnsembleMethod.CONCENTRATION else
+                                 "experimental weighted mean of ranks within the both-successful cohort; lower is better"),
+                    "ensemble_method": ({"method": plan.ensemble.value, "version": 1,
+                                  "reference_commit": plan.ensemble.reference_commit,
+                                  "reference_source": plan.ensemble.reference_source,
+                                  "direction": plan.ensemble.direction,
+                                  "meaning": ("relative normalized score, not a calibrated affinity"
+                                              if plan.ensemble is EnsembleMethod.CONCENTRATION else "weighted average of ranks")}
+                                 if plan.ensemble else None),
+                    "shortlist": ("exactly K valid affinity and distribution rows"
+                                  if plan.ensemble is EnsembleMethod.CONCENTRATION else "exactly K successful PSICHIC rows")
+                                 + "; no replenishment after Boltz failure"},
     }
     _write_json(output / "manifest.json", manifest)
     psichic = None
@@ -145,7 +165,7 @@ def execute(args):
                 provenance = source_provenance(predictor)
                 manifest["psichic"]["source"] = provenance
                 _write_json(output / "manifest.json", manifest)
-                run = score_psichic(rows, predictor)
+                run = score_psichic(rows, predictor, output=plan.required_psichic_output)
                 run.metadata["source"] = provenance
                 return run
             finally:
@@ -165,7 +185,11 @@ def execute(args):
         fields = ["row", "key", "ID", "SMILES", "selection", "selection_reason", "psichic_status", "psichic_affinity",
                   "psichic_failure", "boltz_status", "affinity_probability_binary", "affinity_pred_value", "boltz_failure",
                   "psichic_screen_rank", "boltz_rank", "ensemble_psichic_rank", "ensemble_boltz_rank",
-                  "experimental_combined_value", "final_rank", "unranked_reason"]
+                  "experimental_combined_value", "final_rank", "unranked_reason",
+                  "normalized_ensemble_score", "ensemble_method", "ensemble_reference_commit", "ensemble_score_direction",
+                  "ensemble_reference_source", "ensemble_version", "ensemble_eligible", "ensemble_exclusion_reason", "psichic_distribution_status",
+                  "psichic_alpha", "psichic_beta", "psichic_concentration", "psichic_distribution_failure",
+                  "psichic_raw_alpha", "psichic_raw_beta"]
         writer = csv.DictWriter(handle, fieldnames=fields)
         writer.writeheader()
         for record in records:
@@ -175,9 +199,17 @@ def execute(args):
                           psichic_status=a["status"], psichic_affinity=a.get("raw_affinity"), psichic_failure=a.get("reason"),
                           boltz_status=b["status"], affinity_probability_binary=b.get("affinity_probability_binary"),
                           affinity_pred_value=b.get("affinity_pred_value"), boltz_failure=b.get("reason"))
+            distribution = a.get("distribution", {})
+            eligibility = record["ensemble_eligibility"]
+            values.update(ensemble_eligible=eligibility["eligible"], ensemble_exclusion_reason=eligibility["reason"],
+                          psichic_distribution_status=distribution.get("state"), psichic_alpha=distribution.get("alpha"),
+                          psichic_beta=distribution.get("beta"), psichic_concentration=distribution.get("concentration"),
+                          psichic_distribution_failure=distribution.get("reason"),
+                          psichic_raw_alpha=distribution.get("raw_alpha"), psichic_raw_beta=distribution.get("raw_beta"))
             writer.writerow(values)
     manifest.update(status="partial" if report.failed else "complete", engines=report.engines, errors=report.errors,
-                    ensemble_cohort=[row.candidate.key for row in report.rows if row.experimental_combined_value is not None],
+                    ensemble_cohort=report.ensemble.cohort if report.ensemble else [],
+                    ensemble=report.ensemble.metadata() if report.ensemble else None,
                     finished_at=datetime.now(timezone.utc).isoformat())
     _write_json(output / "manifest.json", manifest)
     print(f"{manifest['status']}: {len(records)} input rows retained in {output}")
