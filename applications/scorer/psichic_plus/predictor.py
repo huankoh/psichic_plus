@@ -107,7 +107,18 @@ class Predictor:
             frame, self.model, loader, self.proteins, loader.dataset.ligands, self.cache,
             self.device, False, False, "fp32", False, False, "thread", False,
         )
-        frame, _ = self.helpers.apply_invalid_ligand_policy(frame, "emit_null")
+        if "predicted_binding_affinity" not in frame:
+            frame["predicted_binding_affinity"] = pd.NA
+        if "inference_status" not in frame:
+            frame["inference_status"] = "success"
+        else:
+            frame["inference_status"] = frame["inference_status"].fillna("success")
+        # Native completeness requires distribution fields even for affinity-only output.
+        missing_affinity = frame["predicted_binding_affinity"].isna() & frame["inference_status"].eq("success")
+        if missing_affinity.any():
+            diagnosed, _ = self.helpers.apply_invalid_ligand_policy(frame.loc[missing_affinity].copy(), "emit_null")
+            for column in ("inference_status", "failure_stage", "failure_reason"):
+                frame.loc[missing_affinity, column] = diagnosed[column]
         results = []
         for row in frame.itertuples(index=False):
             token = tokens[row.ID]

@@ -56,6 +56,9 @@ Its `distribution` is one of these frozen records from `applications.scorer`.
 
 `Success(token, raw_affinity, adaptive_score)` defaults to `DistributionNotRequested()`.
 Affinity-only requests ignore missing or invalid distribution fields.
+The scorer sends only rows without affinity and without an upstream failure to native ligand cleanup.
+That cleanup requires affinity, alpha, and beta together, so it cannot determine whether a point prediction alone succeeded.
+The scorer preserves upstream failure statuses and their diagnostics even when a row also contains numeric output.
 Distribution requests read native `reg_alpha`, `reg_beta`, and `predicted_binding_affinity` from the same inference frame without another model pass.
 Alpha and beta must be finite and positive, and their sum must be finite.
 `BetaDistribution` computes concentration as `alpha + beta` during construction.
@@ -81,3 +84,6 @@ AdaptiveFlow transport and saved-result contracts are separate work.
 Set `PSICHIC_TEST_MODEL_DIR` to authorized weights to enable the native-frame checks on CPU and on CUDA when available.
 These checks compare every returned value with its actual inference frame and verify that each valid entry is inferred once.
 Without that setting, the native checks skip and the remaining tests use controlled inference output without model weights.
+`test_prediction_cleanup.py` replays controlled frames through `Predictor.score` with the real cleanup policy loaded from native `inference.py`.
+It covers missing, None, and NaN distribution fields in both modes, mixed valid and failed entries, absent affinity, and preserved input identities and order.
+These regression tests run without weights and do not perform a model forward pass.
