@@ -3,7 +3,9 @@
 Import `ScoringRun` from `applications.scoring`.
 Use the public API to create tasks and accept evidence.
 Do not write SQLite, accepted pointers, blobs, or report versions from an adapter.
-The core has no engine runner, console entry point, or scheduler adapter.
+The core remains separate from engine execution and scheduling.
+`applications.scoring.executor` supplies the local execution boundary and `python -m applications.scoring` supplies the durable CLI.
+A distributed scheduler adapter remains a separate unit.
 
 ## Freeze the population
 
@@ -113,3 +115,41 @@ AFVS retains scheduling and resource allocation ownership.
 The next adapter unit must qualify the synthetic named-ligand path through native preparation and execution, the Boltz registration and path protections, and actual transfer completeness.
 Retire task-owned PSICHIC processes before reusing the same allocation for Boltz, or use separately allocated workunits.
 The core makes no GPU, cluster-scheduler, remote-storage, or scientific-quality claim.
+
+## Reuse the local runner from the next application unit
+
+Import `resolve` from `applications.scoring.config`, then pass its `LocalPlan` to `executor.create_run` and `executor.execute`.
+The CLI parser defines the current named configuration inputs.
+An application that already owns a frozen `ScoringRun` must retain a compatible `local.json` and input assets before calling the local executor.
+Do not reinterpret existing generator search scores as accepted evidence.
+
+`executor.prepare_invocation` is the bounded rendering and task preparation boundary.
+It creates the exact YAML before committing tasks and maps each twelve-digit core entry key to a fresh eight-digit native Candidate key within that invocation.
+Legacy Candidate keys are unchanged.
+The mapping is retained in receipts and checked before execution.
+Receipt recovery rechecks the same ordered task, native row, key, and filename mapping before publishing an observation.
+
+`worker.publish` can salvage completed observations using the recorded actual process exit status.
+It requires a loaded runtime record and the full required native artifacts.
+A missing structure never becomes Boltz success.
+A nonzero batch exit without complete per-row artifacts remains unknown for explicit resume.
+A zero exit with a missing or invalid result becomes a recorded output failure.
+
+Each invocation has a separate lifecycle owner and native process group.
+The owner registers its identity, starts the model behind a pipe gate, records the child identity, then releases the gate.
+The child watches the pipe and stops its own group when the owner disappears.
+The coordinator records the owner mapping before releasing its own registration gate.
+A stable `driver.lock` serializes a complete local invocation sequence alongside the core command lock.
+The next AFVS adapter must keep scheduler ownership and use `Ownership.EXTERNAL` instead of this local driver.
+
+Runtime fingerprints contain digests of complete named source and weight inventories.
+The full inventories, absolute loaded paths, file hashes, process commands, and actual exit statuses accompany receipts.
+Inventory names normalize checkout and installed-package locations, while file provenance retains their actual paths.
+Import-time generated Python source is hashed from real files in preflight and matched by module identity and exact bytes in each child, retaining both absolute locations.
+It is never treated as reusable merely because the generating package version matches.
+Normalization alone does not authorize reuse between different runtimes or call profiles.
+Preflight hashes once per command; immutable file identity checks and child import verification guard each batch.
+Changed source or assets on resume requires a new run.
+
+The local CLI has no generator `--source-run` option or distributed adapter flags.
+Those are reserved for the next application units.

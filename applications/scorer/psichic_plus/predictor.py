@@ -2,6 +2,7 @@ import importlib.util
 from dataclasses import dataclass
 import gc
 import math
+from numbers import Real
 import os
 import sys
 from pathlib import Path
@@ -19,6 +20,8 @@ from applications.scorer import (
 
 def _distribution_outcome(affinity: float, alpha, beta) -> BetaDistribution | DistributionFailure:
     try:
+        if any(not isinstance(value, Real) or isinstance(value, bool) for value in (alpha, beta)):
+            raise ValueError("Alpha and beta must be native numeric parameters")
         distribution = BetaDistribution(float(alpha), float(beta))
     except (TypeError, ValueError, OverflowError) as error:
         return DistributionFailure(str(error), repr(alpha), repr(beta))
@@ -112,7 +115,7 @@ class Predictor:
     def score_with_evidence(
         self, inputs: list[tuple[str, str]], *, output: Output | str = Output.AFFINITY,
     ) -> list[PredictionEvidence]:
-        """Return each outcome and its unmodified native row from one screening pass."""
+        """Return each outcome and its native row captured before policy cleanup."""
         output = Output(output)
 
         import pandas as pd
@@ -145,7 +148,7 @@ class Predictor:
             for column in ("inference_status", "failure_stage", "failure_reason"):
                 frame.loc[missing_affinity, column] = diagnosed[column]
         results = []
-        for row in frame.itertuples(index=False):
+        for row, native in zip(frame.itertuples(index=False), native_rows, strict=True):
             token = tokens[row.ID]
             if row.inference_status == "success":
                 affinity = float(row.predicted_binding_affinity)
@@ -153,7 +156,7 @@ class Predictor:
                     distribution: DistributionOutcome = DistributionNotRequested()
                     if output is Output.DISTRIBUTION:
                         distribution = _distribution_outcome(
-                            affinity, getattr(row, "reg_alpha", None), getattr(row, "reg_beta", None),
+                            affinity, native.get("reg_alpha"), native.get("reg_beta"),
                         )
                     results.append(Success(token, affinity, -affinity, distribution))
                 else:

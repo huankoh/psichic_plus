@@ -286,9 +286,12 @@ class ScoringRun:
                 raise ContractError("Unexpected attempt identity")
             return Task.from_json(row[0])
 
-    def diagnostics(self):
+    def diagnostics(self, *, after=0, limit=None):
         with self._locked() as db:
-            for row in db.execute("SELECT * FROM evaluations ORDER BY ordinal,engine"):
+            if type(after) is not int or after < 0 or limit is not None and (type(limit) is not int or not 1 <= limit <= MAX_BATCH):
+                raise ContractError("Use a nonnegative ordinal cursor and bounded limit")
+            for row in db.execute("SELECT * FROM evaluations WHERE ordinal>? AND ordinal<=? ORDER BY ordinal,engine",
+                                  (after, after + limit if limit is not None else self.row_count)):
                 yield Diagnostic(row_key(row["ordinal"]), Engine(row["engine"]), State(row["state"]), row["expected"],
                                  row["state"] == "pending" or (row["state"] == State.UNKNOWN.value and bool(row["stopped"])))
 
@@ -307,21 +310,49 @@ class ScoringRun:
             return state
 
     def retry(self, entry_key, engine):
-        key(entry_key)
-        engine = Engine(engine)
+        return self.retry_many(((entry_key, engine),))
+
+    def retry_many(self, requests):
+        """Validate and reset an explicit request atomically, including selection guards."""
         with self._locked() as db:
             db.execute("BEGIN IMMEDIATE")
-            if engine is Engine.PSICHIC and self.settings.pyramid and self._get(db, "selection") == "committed":
-                raise StateError("PSICHIC selection is frozen; changing it requires a new run")
-            row = db.execute("""SELECT v.state,r.distribution FROM evaluations v LEFT JOIN receipts r ON r.digest=v.accepted
-                                 WHERE v.ordinal=? AND v.engine=?""", (int(entry_key[4:]), engine.value)).fetchone()
-            if row is None or not (row["state"] == "failed" or row["distribution"] == "distribution-failure"):
-                raise StateError("Explicit retry requires a recorded engine or distribution failure")
-            db.execute("UPDATE evaluations SET state='pending',expected=NULL,accepted=NULL,stopped=0 WHERE ordinal=? AND engine=?",
-                       (int(entry_key[4:]), engine.value))
-            if self.settings.pyramid and engine is Engine.PSICHIC:
+            count = 0
+            for entry_key, engine in requests:
+                key(entry_key)
+                engine = Engine(engine)
+                if engine is Engine.PSICHIC and self.settings.pyramid and self._get(db, "selection") == "committed":
+                    raise StateError("PSICHIC selection is frozen; changing it requires a new run")
+                row = db.execute("""SELECT v.state,r.distribution FROM evaluations v LEFT JOIN receipts r ON r.digest=v.accepted
+                                     WHERE v.ordinal=? AND v.engine=?""", (int(entry_key[4:]), engine.value)).fetchone()
+                if row is None or not (row["state"] == "failed" or row["distribution"] == "distribution-failure"):
+                    raise StateError("Explicit retry requires a recorded engine or distribution failure")
+                db.execute("UPDATE evaluations SET state='pending',expected=NULL,accepted=NULL,stopped=0 WHERE ordinal=? AND engine=?",
+                           (int(entry_key[4:]), engine.value))
+                if self.settings.pyramid and engine is Engine.PSICHIC:
+                    self._set(db, "selection", "waiting")
+                count += 1
+            db.execute("COMMIT")
+            return count
+
+    def retry_failed(self, *, engine=None):
+        """Reset all recorded failures in one transaction, or leave all of them unchanged."""
+        engine = Engine(engine) if engine is not None else None
+        with self._locked() as db:
+            db.execute("BEGIN IMMEDIATE")
+            db.execute("""CREATE TEMP TABLE retrying AS SELECT v.ordinal,v.engine FROM evaluations v
+                LEFT JOIN receipts r ON r.digest=v.accepted
+                WHERE (v.state='failed' OR r.distribution='distribution-failure') AND (? IS NULL OR v.engine=?)""",
+                       (engine.value if engine else None, engine.value if engine else None))
+            psichic = db.execute("SELECT 1 FROM retrying WHERE engine='psichic' LIMIT 1").fetchone()
+            if psichic and self.settings.pyramid and self._get(db, "selection") == "committed":
+                raise StateError("PSICHIC selection is frozen; create a new run, or retry only --engine boltz")
+            count = db.execute("SELECT count(*) FROM retrying").fetchone()[0]
+            db.execute("""UPDATE evaluations SET state='pending',expected=NULL,accepted=NULL,stopped=0
+                WHERE (ordinal,engine) IN (SELECT ordinal,engine FROM retrying)""")
+            if psichic and self.settings.pyramid:
                 self._set(db, "selection", "waiting")
             db.execute("COMMIT")
+            return count
 
     def accept(self, transfer_directory):
         try:
@@ -406,3 +437,17 @@ class ScoringRun:
     def latest(self):
         from .reports import latest
         return latest(self)
+
+    def report_view(self, version=None, *, top_n=20):
+        """Return stored metadata and a bounded ranking for CLI and application adapters."""
+        if not 0 <= top_n <= 100:
+            raise ContractError("top_n must be between 0 and 100")
+        current = self.latest() if version is None else None
+        version = current.version if current else version
+        with self._locked() as db:
+            row = db.execute("SELECT metadata FROM reports WHERE version=? AND state='published'", (version,)).fetchone()
+            if row is None:
+                return None
+            return {**loads(row[0]), "top": [loads(record[0]) for record in db.execute(
+                "SELECT record FROM report_rows WHERE version=? AND position IS NOT NULL ORDER BY position LIMIT ?",
+                (version, top_n))]}

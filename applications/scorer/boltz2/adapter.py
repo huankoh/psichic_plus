@@ -96,6 +96,14 @@ class BoltzRunner:
         self.metadata.update(model="boltz2", msa_mode=self.target.msa_mode, native_help=help_result.stdout)
         return self.metadata
 
+    def prediction_command(self, inputs, native_output):
+        """Build native arguments for already rendered, fresh invocation inputs."""
+        command = [self.executable, "predict", str(inputs), "--out_dir", str(native_output), "--model", "boltz2"]
+        if self.target.msa_mode == "server":
+            command.append("--use_msa_server")
+        command.extend(self.options)
+        return command
+
     def __call__(self, candidates):
         inputs = self.directory / "inputs"
         inputs.mkdir()
@@ -112,10 +120,7 @@ class BoltzRunner:
             self.target.render(prepared, candidate, path)
             manifest.append({**asdict(candidate), "key": candidate.key, "input": str(path)})
         (self.directory / "input_manifest.json").write_text(json.dumps(manifest, indent=2))
-        command = [self.executable, "predict", str(inputs), "--out_dir", str(native_output), "--model", "boltz2"]
-        if self.target.msa_mode == "server":
-            command.append("--use_msa_server")
-        command.extend(self.options)
+        command = self.prediction_command(inputs, native_output)
         metadata = {**self.metadata, "command": recorded_command(command), "assets": assets}
         metadata.pop("native_help", None)
         error = None

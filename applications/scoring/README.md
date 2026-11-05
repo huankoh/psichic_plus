@@ -1,7 +1,9 @@
 # Durable scoring core
 
 `applications.scoring` owns a saved population and its accepted observations.
-It does not invoke models, submit scheduler jobs, or own a GPU.
+The core does not invoke models or submit scheduler jobs.
+The optional local executor invokes the existing Predictor and isolated pinned Boltz runtime.
+Use [the CLI guide](CLI.md) for installation, validation, ranking, resume, and explicit failure retry.
 The coordinator requires Python 3.11 or newer and SQLite with JSON, generated columns, and window functions.
 This unit is verified on Python 3.12.15 and SQLite 3.53.4.
 The original `applications.scorer.boltz2` interface and its `rank-v1` default remain independent.

@@ -39,6 +39,8 @@ RUN python -m pip install --no-cache-dir -c applications/generator/constraints.t
     'boto3>=1.34,<2' 'pyarrow>=15,<24' 'ipython>=8,<10' 'jinja2>=3.1,<4' \
     && python -m applications.generator.install \
     && python -m pip install --no-deps --no-build-isolation applications/screener \
+    && python -m pip install --no-deps --no-build-isolation applications \
+    && psichic --help \
     && python -m pip check \
     && python -m psichic_ligand verify
 RUN git clone https://github.com/QuantumAI4Bio/AdaptiveFlow-VS.git /opt/AdaptiveFlow-VS \

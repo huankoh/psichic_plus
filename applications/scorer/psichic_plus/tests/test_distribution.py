@@ -100,6 +100,9 @@ def test_rich_batch_preserves_native_values_identities_and_one_inference(fake_in
     {"reg_alpha": None, "reg_beta": 2.0},
     {"reg_alpha": 2.0, "reg_beta": None},
     {"reg_alpha": "invalid", "reg_beta": 2.0},
+    {"reg_alpha": "2", "reg_beta": 2.0},
+    {"reg_alpha": 2.0, "reg_beta": "2"},
+    {"reg_alpha": True, "reg_beta": 1.0},
     {"reg_alpha": 1e308, "reg_beta": 1e308},
     {"reg_alpha": 2.0, "reg_beta": 6.0},
 ] + [

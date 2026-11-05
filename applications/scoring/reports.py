@@ -150,6 +150,8 @@ def _metadata(run, db, version, snapshot, accepted_digest, selection):
     ranked, constants, discrimination, direction = _score(run, db)
     counts = {"entries": run.row_count, "ranked": ranked,
               "selected": db.execute("SELECT count(*) FROM selection").fetchone()[0]}
+    counts["unranked"] = run.row_count - ranked
+    counts["not_selected"] = run.row_count - counts["selected"]
     for engine in Engine:
         for state in ("succeeded", "failed"):
             counts[f"{engine.value}_{state}"] = db.execute("SELECT count(*) FROM evaluations WHERE engine=? AND state=?", (engine.value, state)).fetchone()[0]
@@ -233,11 +235,25 @@ def _publish(run, db, row, top_n):
         if metadata["shortage"]:
             summary.append(f"Shortlist shortage: {metadata['shortage']['eligible']} eligible, {metadata['shortage']['required']} required. No Boltz tasks were prepared.\n")
         summary.extend(warning + "\n" for warning in metadata["warnings"])
-        summary.append("\n| Position | Average rank | Entry key | Original ID | Score |\n|---|---|---|---|---|\n")
+        summary.append("Counts: " + ", ".join(f"{name}={count}" for name, count in metadata["counts"].items()) + "\n")
+        columns = ["Position", "Average rank", "Entry key", "Original ID", "SMILES", "PSICHIC affinity", "Boltz affinity", "Binder probability"]
+        distribution = run.settings.psichic_output is Output.DISTRIBUTION
+        if distribution:
+            columns += ["Alpha", "Beta", "Concentration"]
+        columns += ["Score", "Status"]
+        summary.append("\n| " + " | ".join(columns) + " |\n|" + "---|" * len(columns) + "\n")
         for record, in db.execute("SELECT record FROM report_rows WHERE version=? AND position IS NOT NULL ORDER BY position LIMIT ?", (report.version, top_n)):
             value = loads(record)
-            identifier = value["entry"]["id"][:100].replace("|", "\\|").replace("\n", " ").replace("\r", " ")
-            summary.append(f"| {value['position']} | {value['final_rank']} | {value['entry']['key']} | {identifier} | {value['score']} |\n")
+            p, b = value["psichic"]["raw"] or {}, value["boltz"]["raw"] or {}
+            cells = [value["position"], value["final_rank"], value["entry"]["key"], value["entry"]["id"], value["entry"]["smiles"],
+                     p.get("raw_affinity"), b.get("affinity_pred_value"), b.get("affinity_probability_binary")]
+            if distribution:
+                d = p.get("distribution", {})
+                cells += [d.get(name) for name in ("alpha", "beta", "concentration")]
+            cells += [value["score"], value["status"]]
+            escaped = [("-" if cell is None else str(cell)).replace("|", "\\|").replace("\n", " ").replace("\r", " ")
+                       for cell in cells]
+            summary.append("| " + " | ".join(escaped) + " |\n")
         summary.append("\nFull population and evidence links: [JSON](results.json), [CSV](results.csv).\n")
         write_file(staging / "summary.md", "\n".join(summary))
         write_file(staging / "files.json", canonical(_files_digest(staging)) + "\n")

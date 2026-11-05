@@ -183,3 +183,30 @@ Finalization first publishes committed interrupted snapshots, even if current ob
 The latest pointer always names the highest published version.
 Finalization repairs a missing or stale pointer before checking pending work, including a crash after the published database marker was committed.
 Unfinished populations return diagnostics rather than a final global ranking.
+
+## Local executor records
+
+`local.json` and its immutable checksum retain the resolved local runtime, native option defaults, explicit overrides, source paths, target asset map, seed, and chunk size.
+The core Settings remain authoritative for engine behavior.
+`inputs` contains copied original candidates and target assets, the selected FASTA, and the native complex document.
+The core manifest remains the source of candidates during resume.
+
+`local/prepared` retains incomplete preparation evidence.
+`local/invocations/<invocation_id>` owns a frozen request, exact native inputs, key mapping, logs, process identities, raw native outputs, and transfer directories.
+Only the worker writes invocation output or completion records.
+`completion.json` is atomically published after the owner observes the actual child exit code.
+A valid per-entry result may carry a nonzero invocation exit code.
+Absent completion evidence never implies exit zero.
+`published.json` marks completion of worker receipt publication, independently of core acceptance.
+Receipt ingestion and publication recovery do not invoke a model.
+
+The local process owner keeps the exited group leader unreaped until it clears remaining group members.
+This prevents PID reuse while cleaning up descendants.
+A later coordinator checks process creation time, process group identity, and invocation locks before reconciliation.
+Unknown or inaccessible ownership remains unresolved and cannot be redispatched.
+
+The model group also contains a small guardian process.
+It keeps the group identity alive and clears that same group if the model disappears, including simultaneous model and owner termination.
+It does not schedule work, accept results, or mutate coordinator state.
+The child publishes its loaded-runtime verification after inference returns or raises a handled exception.
+A hard kill before that record leaves outputs unaccepted until an explicit resume creates a new observation.
