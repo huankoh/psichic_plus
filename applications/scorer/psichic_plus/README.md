@@ -87,3 +87,11 @@ Without that setting, the native checks skip and the remaining tests use control
 `test_prediction_cleanup.py` replays controlled frames through `Predictor.score` with the real cleanup policy loaded from native `inference.py`.
 It covers missing, None, and NaN distribution fields in both modes, mixed valid and failed entries, absent affinity, and preserved input identities and order.
 These regression tests run without weights and do not perform a model forward pass.
+
+## Retain same-pass native evidence
+
+`Predictor.score_with_evidence(inputs, output="distribution")` returns `PredictionEvidence` records.
+Each contains the ordinary typed `outcome` and the full `native` row from that same screening pass, before output cleanup.
+`score()` and the five-argument constructor remain compatible with existing callers.
+Set `PSICHIC_ESM_CHECKPOINT` to a local `esm2_t33_650M_UR50D.pt` beside its contact-regression checkpoint for offline model loading.
+The durable executor validates and fingerprints those files before constructing the predictor.

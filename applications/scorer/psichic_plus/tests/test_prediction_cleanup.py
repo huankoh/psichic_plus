@@ -145,3 +145,21 @@ def test_native_cleanup_diagnoses_absent_affinity_column(native_inference, outpu
     assert result.token == "missing"
     assert result.stage == "prediction"
     assert "PREDICTION_MISSING" in result.reason
+
+
+def test_public_evidence_retains_full_native_rows_from_one_pass(native_inference):
+    predictor, calls = native_inference([
+        {'predicted_binding_affinity': 9., 'reg_alpha': float('inf'), 'reg_beta': 1.,
+         'diagnostic': 'original native value'},
+        {'predicted_binding_affinity': None},
+    ])
+    results = predictor.score_with_evidence([('duplicate', 'CCO'), ('duplicate', '')], output='distribution')
+    assert len(calls) == 1
+    assert isinstance(results[0].outcome, Success)
+    assert isinstance(results[0].outcome.distribution, DistributionFailure)
+    assert results[0].native['reg_alpha'] == float('inf')
+    assert results[0].native['diagnostic'] == 'original native value'
+    assert results[0].native['predicted_binding_affinity'] == 9.
+    assert isinstance(results[1].outcome, Failure)
+    assert results[1].outcome.stage == 'ligand_input'
+    assert results[1].native['predicted_binding_affinity'] is None

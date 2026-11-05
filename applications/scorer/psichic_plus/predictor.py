@@ -1,4 +1,5 @@
 import importlib.util
+from dataclasses import dataclass
 import gc
 import math
 import os
@@ -32,12 +33,33 @@ def _distribution_outcome(affinity: float, alpha, beta) -> BetaDistribution | Di
     return distribution
 
 
+@dataclass(frozen=True)
+class PredictionEvidence:
+    outcome: Success | Failure
+    native: dict
+
+
+def load_helpers():
+    """Import the selected screening implementation without loading models."""
+    screening = Path(os.environ.get(
+        "PSICHIC_SCREENING_DIR", Path(__file__).resolve().parents[3] / "psichic_plus_screening",
+    )).resolve()
+    sys.path.insert(0, str(screening))
+    spec = importlib.util.spec_from_file_location("adaptive_screening_inference", screening / "inference.py")
+    helpers = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(helpers)
+    return helpers
+
+
 def _protein_state(fasta, device):
     import featurizers
     import torch
 
     _, sequence = fasta
-    model, alphabet = featurizers.esm.pretrained.load_model_and_alphabet("esm2_t33_650M_UR50D")
+    esm_checkpoint = os.environ.get("PSICHIC_ESM_CHECKPOINT")
+    model, alphabet = featurizers.esm.pretrained.load_model_and_alphabet(
+        str(esm_checkpoint) if esm_checkpoint is not None else "esm2_t33_650M_UR50D",
+    )
     model.eval()
     model.to(device)
     sequence = featurizers.replace_non_standard_residues(sequence, featurizers.pro_res_table)
@@ -67,13 +89,7 @@ class Predictor:
     def __init__(self, fasta: str, model_dir: str, device: str, cache: str, batch_size: int):
         import torch
 
-        screening = Path(os.environ.get(
-            "PSICHIC_SCREENING_DIR", Path(__file__).resolve().parents[3] / "psichic_plus_screening",
-        ))
-        sys.path.insert(0, str(screening))
-        spec = importlib.util.spec_from_file_location("adaptive_screening_inference", screening / "inference.py")
-        self.helpers = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(self.helpers)
+        self.helpers = load_helpers()
         torch.set_num_threads(int(os.environ.get("OMP_NUM_THREADS", "1")))
         self.device = torch.device(device)
         self.cache = Path(cache)
@@ -91,6 +107,12 @@ class Predictor:
     def score(
         self, inputs: list[tuple[str, str]], *, output: Output | str = Output.AFFINITY,
     ) -> list[Success | Failure]:
+        return [item.outcome for item in self.score_with_evidence(inputs, output=output)]
+
+    def score_with_evidence(
+        self, inputs: list[tuple[str, str]], *, output: Output | str = Output.AFFINITY,
+    ) -> list[PredictionEvidence]:
+        """Return each outcome and its unmodified native row from one screening pass."""
         output = Output(output)
 
         import pandas as pd
@@ -107,6 +129,9 @@ class Predictor:
             frame, self.model, loader, self.proteins, loader.dataset.ligands, self.cache,
             self.device, False, False, "fp32", False, False, "thread", False,
         )
+        native_rows = frame.to_dict(orient="records")
+        if list(frame.ID) != list(tokens):
+            raise ValueError("Native predictions changed the exact input row identity or order")
         if "predicted_binding_affinity" not in frame:
             frame["predicted_binding_affinity"] = pd.NA
         if "inference_status" not in frame:
@@ -135,4 +160,4 @@ class Predictor:
                     results.append(Failure(token, "prediction", "Non-finite affinity"))
             else:
                 results.append(Failure(token, str(row.failure_stage), str(row.failure_reason)))
-        return results
+        return [PredictionEvidence(outcome, native) for outcome, native in zip(results, native_rows, strict=True)]
