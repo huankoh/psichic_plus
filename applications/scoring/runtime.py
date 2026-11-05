@@ -45,18 +45,25 @@ def package_versions():
     return dict(sorted((d.metadata['Name'], d.version) for d in metadata.distributions() if d.metadata['Name']))
 
 
+def source_path(path):
+    return ('__pycache__' not in path.parts
+            and (path.suffix in ('.py', '.so', '.pyd', '.dylib', '.smi', '.jsonl', '.jinja') or '.so.' in path.name))
+
+
 def source_files(roots):
-    files = []
-    for name, root in roots.items():
+    files = {}
+    for name, root in sorted(roots.items()):
         root = Path(root).resolve()
         paths = [root] if root.is_file() else sorted(p for p in root.rglob('*') if p.is_file()
-            and '__pycache__' not in p.parts and 'tests' not in p.relative_to(root).parts
-            and (p.suffix in ('.py', '.so', '.pyd', '.dylib', '.smi', '.jsonl', '.jinja') or '.so.' in p.name))
+            and 'tests' not in p.relative_to(root).parts and source_path(p))
         if not paths:
             raise ValueError(f'No source found for {name} at {root}')
         for path in paths:
-            files.append(file_evidence(name + '/' + (path.name if root.is_file() else path.relative_to(root).as_posix()), path, allow_empty=True))
-    return files
+            resolved = str(path.resolve())
+            if resolved not in files:
+                files[resolved] = file_evidence(name + '/' + (path.name if root.is_file() else path.relative_to(root).as_posix()),
+                                                path, allow_empty=True)
+    return list(files.values())
 
 
 def standard_library(path):
@@ -65,8 +72,21 @@ def standard_library(path):
 
 
 def source_inventory(roots):
-    files = source_files(roots)
-    known = {item['path'] for item in files}
+    """Freeze explicit roots and installed distribution files without importing dependencies."""
+    files = {item['path']: item for item in source_files({**roots, 'python-executable': sys.executable})}
+    distributions = sorted(metadata.distributions(),
+                           key=lambda d: (d.metadata['Name'] or '', str(d.locate_file(''))))
+    for distribution in distributions:
+        distribution_name = distribution.metadata['Name']
+        for item in sorted(distribution.files or ()):
+            if not source_path(item) and item.name not in ('RECORD', 'METADATA', 'PKG-INFO', 'SOURCES.txt', 'direct_url.json'):
+                continue
+            path = Path(item.locate()).resolve(strict=True)
+            if str(path) not in files:
+                name = f'installed/{distribution_name}/{item}'
+                files[str(path)] = file_evidence(name, path, allow_empty=True)
+    known = set(files)
+    files = list(files.values())
     for name, module in tuple(sys.modules.items()):
         origin = getattr(getattr(module, '__spec__', None), 'origin', None)
         if not origin or origin in ('built-in', 'frozen'):
@@ -77,21 +97,7 @@ def source_inventory(roots):
         # Some libraries generate import-time source in a new temporary directory
         # per process. Bind its real bytes by module identity, retaining both paths.
         files.append({**file_evidence('import/' + name, path, allow_empty=True), 'module': name})
-    return files
-
-
-def loaded_package_roots(roots, modules):
-    for name, module in tuple(sys.modules.items()):
-        if '.' in name or name in roots:
-            continue
-        spec = getattr(module, '__spec__', None)
-        origin = getattr(spec, 'origin', None)
-        if not origin or 'site-packages' not in Path(origin).parts:
-            continue
-        path = Path(origin).resolve()
-        roots[name] = path.parent if spec.submodule_search_locations else path
-        modules.append(name)
-    roots['python-executable'] = Path(sys.executable).resolve()
+    return sorted(files, key=lambda item: (item['name'], item['path']))
 
 
 def verify_files(files):
@@ -177,7 +183,6 @@ def inspect_psichic(options):
     for name in modules:
         module = importlib.import_module(name)
         roots[name] = Path(module.__file__).parent
-    loaded_package_roots(roots, modules)
     model = Path(options['model_dir'])
     esm = Path(options['esm_checkpoint'])
     files = [(f'psichic/{name}', model / name) for name in ('config.json', 'degree.pt', 'model.pt')]
@@ -246,7 +251,6 @@ def inspect_boltz(options):
     roots = {name: Path(importlib.import_module(name).__file__).parent for name in modules}
     roots['executor-runtime'] = Path(__file__)
     roots['executor-guardian'] = Path(__file__).with_name('guardian.py')
-    loaded_package_roots(roots, modules)
     profile = {'engine_version': '2.2.1', 'weights': [file_evidence(n, p) for n, p in files],
                'source': source_inventory(roots), 'environment': environment(resolved['accelerator']), 'device': resolved['accelerator'],
                'precision': 'bf16-mixed; float32 matmul highest', 'modules': modules,

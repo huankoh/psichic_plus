@@ -107,3 +107,36 @@ An interrupted publication can resume from the stored snapshot without changing 
 Temporary directories remain as evidence.
 No-change finalization returns the existing version.
 An explicit retry that changes the successful cohort publishes a new version because every normalized score or rank can change.
+
+## Installed runtime source inventory
+
+Local preflight freezes source before inference, including files from every installed distribution visible to that engine's Python.
+This matches the environment contract, which already records all installed package versions.
+Coverage does not depend on which packages preflight happened to import.
+The inventory reads distribution file lists without importing their packages.
+It includes existing recorded `.py`, `.so`, `.pyd`, `.dylib`, `.so.*`, `.jinja`, `.smi`, and `.jsonl` files, including recorded package test helpers.
+It also hashes `RECORD`, `METADATA`, `PKG-INFO`, `SOURCES.txt`, and `direct_url.json` when listed.
+Explicit application and engine roots retain their existing source and resource coverage.
+The Python executable is hashed too.
+
+Each resolved file path has one record with its exact preflight hash and filesystem stamp.
+Overlapping roots, distribution records, and import aliases share that path record.
+Sorted logical names and hashes determine source identity, independent of metadata enumeration order and imports performed later.
+Namespace packages need no package `__file__` because their installed children have file records.
+An editable or external source file is covered only if its path is recorded by installation metadata, belongs to an explicit root, or was captured by the existing preflight import contract.
+A distribution without a file list adds no implicit directory authorization.
+Python's metadata API can omit missing listed files.
+Those paths receive no authorization and fail the loaded-source check if created and imported after freezing.
+
+Workers still require every loaded non-stdlib module to match an exact frozen path and hash.
+A file added after freezing fails even inside an inventoried package directory.
+A changed recorded file, unknown temporary generated module, or unrecorded late external module also fails.
+Preflight-generated temporary modules retain their module identity and exact-byte check across processes.
+PSICHIC's three expected PyG modules retain their separately predicted exact-byte contract, including GCN fusion.
+Boltz 2.2.1 still requires its installed Python source to match its RECORD before preflight and execution.
+
+Installed optional packages are included even when the current prediction does not use them.
+Changing their inventoried source requires a new run.
+This avoids inferring which optional dependencies inference might load, at the cost of hashing the broader installed runtime during preflight.
+The contract does not attest arbitrary in-memory monkeypatches, every library loaded outside Python module specifications, or unlisted non-source data files.
+Validation remains offline and does not construct prediction models, deserialize checkpoints, initialize CUDA, or create a run directory.
