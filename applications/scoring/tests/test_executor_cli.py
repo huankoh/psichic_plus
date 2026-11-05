@@ -35,7 +35,9 @@ import numpy as np
 class Alphabet:
     def get_batch_converter(self):
         return None
-esm = SimpleNamespace(pretrained=SimpleNamespace(load_model_and_alphabet=lambda path: (torch.nn.Linear(1, 1), Alphabet())))
+esm = SimpleNamespace(pretrained=SimpleNamespace(
+    load_model_and_alphabet=lambda path: (torch.nn.Linear(1, 1), Alphabet()),
+    load_model_and_alphabet_core=lambda *args: (torch.nn.Linear(1, 1), Alphabet())))
 def esm_extract(*args, **kwargs):
     return torch.zeros(2, 1280), np.zeros((2, 2)), None
 def contact_map(contacts):
@@ -98,6 +100,11 @@ def run_screening(frame, *args):
     weights.mkdir()
     for name in ('config.json', 'degree.pt', 'model.pt', 'esm2_t33_650M_UR50D.pt', 'esm2_t33_650M_UR50D-contact-regression.pt'):
         (weights / name).write_text('controlled fixture, not trained weights')
+    import torch
+    from argparse import Namespace
+
+    torch.save({'cfg': Namespace(controlled=True), 'model': {}}, weights / 'esm2_t33_650M_UR50D.pt')
+    torch.save({'model': {}}, weights / 'esm2_t33_650M_UR50D-contact-regression.pt')
     fasta = tmp_path / 'target.fasta'
     fasta.write_text('>test\nAC\n')
     candidates = tmp_path / 'molecules.csv'
