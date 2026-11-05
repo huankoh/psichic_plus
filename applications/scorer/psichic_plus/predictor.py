@@ -5,7 +5,31 @@ import os
 import sys
 from pathlib import Path
 
-from applications.scorer import Failure, Success
+from applications.scorer import (
+    BetaDistribution,
+    DistributionFailure,
+    DistributionNotRequested,
+    DistributionOutcome,
+    Failure,
+    Output,
+    Success,
+)
+
+
+def _distribution_outcome(affinity: float, alpha, beta) -> BetaDistribution | DistributionFailure:
+    try:
+        distribution = BetaDistribution(float(alpha), float(beta))
+    except (TypeError, ValueError, OverflowError) as error:
+        return DistributionFailure(str(error), repr(alpha), repr(beta))
+    # Match the native ratio-first formula without overflowing 12 * alpha.
+    expected_affinity = 12.0 * (distribution.alpha / distribution.concentration)
+    if not math.isclose(affinity, expected_affinity, rel_tol=1e-6, abs_tol=1e-6):
+        return DistributionFailure(
+            f"Affinity {affinity!r} is inconsistent with 12 * alpha / (alpha + beta) "
+            f"({expected_affinity!r})",
+            repr(alpha), repr(beta),
+        )
+    return distribution
 
 
 def _protein_state(fasta, device):
@@ -64,7 +88,11 @@ class Predictor:
             **{key: value for key, value in strategies.items() if key != "inference_preset"},
         )
 
-    def score(self, inputs: list[tuple[str, str]]) -> list[Success | Failure]:
+    def score(
+        self, inputs: list[tuple[str, str]], *, output: Output | str = Output.AFFINITY,
+    ) -> list[Success | Failure]:
+        output = Output(output)
+
         import pandas as pd
 
         tokens = {str(index): token for index, (token, _) in enumerate(inputs)}
@@ -86,7 +114,12 @@ class Predictor:
             if row.inference_status == "success":
                 affinity = float(row.predicted_binding_affinity)
                 if math.isfinite(affinity):
-                    results.append(Success(token, affinity, -affinity))
+                    distribution: DistributionOutcome = DistributionNotRequested()
+                    if output is Output.DISTRIBUTION:
+                        distribution = _distribution_outcome(
+                            affinity, getattr(row, "reg_alpha", None), getattr(row, "reg_beta", None),
+                        )
+                    results.append(Success(token, affinity, -affinity, distribution))
                 else:
                     results.append(Failure(token, "prediction", "Non-finite affinity"))
             else:
