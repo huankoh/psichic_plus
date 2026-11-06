@@ -120,6 +120,11 @@ The core makes no GPU, cluster-scheduler, remote-storage, or scientific-quality 
 
 Import `resolve` from `applications.scoring.config`, then pass its `LocalPlan` to `executor.create_run` and `executor.execute`.
 The CLI parser defines the current named configuration inputs.
+`add_rank_arguments` exposes those same scoring parameters to application CLIs.
+`create_run(plan, entries=...)` accepts adapter-provided typed entries while retaining the plan's exact candidate bytes and local runtime.
+The generator uses this boundary to retain all native columns and original row locators.
+`resolve(args, future_population=True)` preflights runtime and target settings with an unknown product count.
+Such a future plan cannot create a scoring run.
 An application that already owns a frozen `ScoringRun` must retain a compatible `local.json` and input assets before calling the local executor.
 Do not reinterpret existing generator search scores as accepted evidence.
 
@@ -151,5 +156,7 @@ Normalization alone does not authorize reuse between different runtimes or call 
 Preflight hashes once per command; immutable file identity checks and child import verification guard each batch.
 Changed source or assets on resume requires a new run.
 
-The local CLI has no generator `--source-run` option or distributed adapter flags.
-Those are reserved for the next application units.
+The [generator CLI](../generator/README.md) owns `rank --source-run` and the automatic native completion barrier.
+It imports products into this local executor and never converts native search scores into accepted inference receipts.
+The shared `psichic` CLI keeps its direct CSV interface.
+Distributed adapter flags remain outside this local execution contract.

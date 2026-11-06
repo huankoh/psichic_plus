@@ -4,7 +4,7 @@ These applications use PSICHIC+ and an optional isolated Boltz-2 scorer.
 
 - [PSICHIC+ scorer](scorer/psichic_plus/): load a target and model once and score molecules in batches.
 - [Boltz-2 workflows](scorer/boltz2/): run Boltz alone, a full rank ensemble, or either of two PSICHIC+ shortlist workflows.
-- [generator](generator/): use PSICHIC+ to guide native SyntheMol generation.
+- [generator](generator/): use PSICHIC+ to guide native SyntheMol generation and optionally rank completed products through the shared durable scorer.
 - [screener](screener/): use PSICHIC+ in native AdaptiveFlow-VS screening workunits.
 
 ## Shared Docker image

@@ -198,4 +198,7 @@ That runtime needs a qualified preflight update before its outputs can be reused
 Boltz retains its installed-RECORD and loaded-source checks and has no new dynamic-source authorization.
 This contract does not qualify real Boltz model construction or GPU execution.
 Those fixtures are not trained-model inference evidence.
-GPU execution, rebuilt Docker images, independent review, generator integration, and the distributed AdaptiveFlow adapter belong to later verification or implementation units.
+The [generator adapter](../generator/README.md) now imports native products and offers automatic final scoring through this executor.
+Its author-controlled native and subprocess checks are distinct from pending independent real-model generator integration.
+GPU qualification of the shared executor has separate retained evidence and does not qualify the new generator boundary automatically.
+Rebuilt Docker images, independent generator review and GPU verification, and the distributed AdaptiveFlow adapter remain separate units.
