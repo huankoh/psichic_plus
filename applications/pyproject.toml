@@ -11,14 +11,20 @@ dependencies = ["PyYAML>=6,<7", "psutil>=5.9,<8"]
 
 [project.scripts]
 psichic = "applications.scoring.__main__:main"
+psichic-generator = "applications.generator.cli:main"
 
 [tool.setuptools]
-packages = ["applications", "applications.scoring", "applications.scorer", "applications.scorer.psichic_plus", "applications.scorer.boltz2", "psichic_plus_screening"]
+packages = ["applications", "applications.generator", "applications.generator.example", "applications.scoring", "applications.scorer", "applications.scorer.psichic_plus", "applications.scorer.boltz2", "psichic_plus_screening"]
 
 [tool.setuptools.package-dir]
 applications = "."
+"applications.generator" = "generator"
+"applications.generator.example" = "generator/example"
 "applications.scoring" = "scoring"
 "applications.scorer" = "scorer"
 "applications.scorer.psichic_plus" = "scorer/psichic_plus"
 "applications.scorer.boltz2" = "scorer/boltz2"
 psichic_plus_screening = "../psichic_plus_screening"
+
+[tool.setuptools.package-data]
+"applications.generator" = ["patches/*.patch", "patches/*.md", "example/*.csv", "example/*.fasta", "example/*.pkl", "requirements.txt", "constraints.txt"]

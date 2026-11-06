@@ -585,6 +585,32 @@ def test_installed_console_runs_outside_checkout(runtime, tmp_path):
     assert value['counts']['ranked'] == 3
     installed_source = next((runtime['run'] / 'local/invocations').iterdir()) / 'profile.json'
     assert all(not f['path'].startswith(str(ROOT)) for f in read(installed_source)['source'])
+    generator = install / 'applications/generator'
+    assert (generator / 'patches/synthemol-6030233.patch').is_file()
+    assert (generator / 'example/real.pkl').is_file()
+    assert (generator / 'example/building_blocks.csv').is_file()
+    for command in ([str(install / 'bin/psichic-generator'), 'rank', '--help'],
+                    [str(install / 'bin/psichic-generator'), '--help'],
+                    [sys.executable, '-m', 'applications.generator', 'generate-and-rank', '--help'],
+                    [sys.executable, '-m', 'applications.generator.install', '--help']):
+        process = subprocess.run(command, env=env, cwd=outside, capture_output=True, text=True, timeout=30)
+        assert process.returncode == 0, process.stderr
+    native = tmp_path / 'native-products'
+    native.mkdir()
+    (native / 'molecules.csv').write_text('node_id,smiles,score,num_reactions\n../kept,CCO,99,1\n')
+    args = runtime['args'].copy()
+    index = args.index('--candidates')
+    args[index:index + 2] = ['--source-run', str(native)]
+    args[args.index('--output') + 1] = str(tmp_path / 'installed-generator-run')
+    for command, suffix in (([str(install / 'bin/psichic-generator')], '.console'),
+                            ([sys.executable, '-m', 'applications.generator'], '.module')):
+        args[args.index('--output') + 1] = str(tmp_path / ('installed-generator-run' + suffix))
+        process = subprocess.run([*command, *args], env=env, cwd=outside, capture_output=True, text=True, timeout=180)
+        (tmp_path / f'installed-generator{suffix}.stdout.json').write_text(process.stdout)
+        (tmp_path / f'installed-generator{suffix}.stderr.log').write_text(process.stderr)
+        value = json.loads(process.stdout)
+        assert process.returncode == 0 and value['counts']['ranked'] == 1, (value, process.stderr)
+        assert value['top'][0]['entry']['metadata']['native']['score'] == '99'
 
 
 @pytest.mark.parametrize('extra', [
