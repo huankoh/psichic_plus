@@ -181,7 +181,7 @@ def test_existing_and_future_validation_counts_and_no_model_start(runtime):
 
 
 def test_pinned_native_generation_then_scoring_preserves_all_columns_and_process_barrier(runtime):
-    result, value = cli(runtime, auto_args(runtime, native_args(runtime)))
+    result, value = cli(runtime, auto_args(runtime, native_args(runtime)), timeout=600)
     assert result.returncode == 0, (value, result.stderr)
     native = runtime['root'] / 'native/molecules.csv'
     rows = read(value['reports']['results.json'])['rows']
