@@ -1,3 +1,4 @@
+import math
 import os
 import sys
 
@@ -119,14 +120,36 @@ def main():
             "thread",
             False,
         )
-        result, _ = screening.apply_invalid_ligand_policy(result, "emit_null")
+        if "predicted_binding_affinity" not in result:
+            result["predicted_binding_affinity"] = pd.NA
+        if "inference_status" not in result:
+            result["inference_status"] = "success"
+        else:
+            result["inference_status"] = result["inference_status"].fillna("success")
+        # Native completeness also requires alpha and beta, so diagnose only rows
+        # without an affinity. Bad distribution fields keep a finite affinity.
+        missing_affinity = result["predicted_binding_affinity"].isna() & result["inference_status"].eq("success")
+        if missing_affinity.any():
+            diagnosed, _ = screening.apply_invalid_ligand_policy(result.loc[missing_affinity].copy(), "emit_null")
+            for column in ("inference_status", "failure_stage", "failure_reason"):
+                result.loc[missing_affinity, column] = diagnosed[column]
         rows = []
         for position, row in result.iterrows():
             if row["inference_status"] == "success":
+                affinity = float(row["predicted_binding_affinity"])
+                if not math.isfinite(affinity):
+                    rows.append(
+                        {
+                            "position": int(position),
+                            "stage": "prediction",
+                            "reason": "Non-finite affinity",
+                        }
+                    )
+                    continue
                 rows.append(
                     {
                         "position": int(position),
-                        "affinity": float(row["predicted_binding_affinity"]),
+                        "affinity": affinity,
                     }
                 )
                 if requested_output == 'distribution':

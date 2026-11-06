@@ -356,14 +356,15 @@ def test_actual_child_rich_same_pass_preserves_affinity_on_distribution_failure(
     monkeypatch.setenv('PYTHONPATH', os.pathsep.join([str(runtime['root'] / 'controlled-screening'), str(ROOT), str(ROOT / 'applications/screener')]))
     monkeypatch.chdir(runtime['root'])
     scorer = Scorer(Target(runtime['root'] / 'target.fasta', runtime['weights'], 'cpu'), 1)
-    entries = [ScoreInput(LigandKey('A_1', 'same'), 0, Path('unused'), smiles) for smiles in ('CCN', 'DIST')]
+    entries = [ScoreInput(LigandKey('A_1', 'same'), 0, Path('unused'), smiles) for smiles in ('CCN', 'DIST', 'MISSING_DIST')]
     try:
         result = scorer.score(entries, 60, output='distribution')
         assert all(isinstance(r, Affinity) and r.value == 9 for r in result), result
         assert result[0].distribution == {'state': 'valid', 'alpha': 3., 'beta': 1., 'concentration': 4.}
         assert result[1].distribution['state'] == 'distribution-failure'
+        assert result[2].distribution['state'] == 'distribution-failure'
         assert len(calls(runtime)) == 1
-        assert scorer.score(entries, 60) == [Affinity(9), Affinity(9)]
+        assert scorer.score(entries, 60) == [Affinity(9), Affinity(9), Affinity(9)]
         assert len(calls(runtime)) == 2
     finally:
         scorer.close()
