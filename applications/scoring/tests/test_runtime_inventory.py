@@ -171,6 +171,27 @@ print('stdlib alias accepted; unrecorded and changed external sources rejected')
     assert result.returncode == 0, result.stdout + result.stderr
 
 
+def test_verify_files_accepts_same_bytes_when_stamp_changes(tmp_path):
+    import pytest
+    from applications.scoring import runtime
+
+    path = tmp_path / 'boltz_init.py'
+    path.write_bytes(b'same bytes in a fresh container\n')
+    recorded = runtime.file_evidence('boltz/__init__.py', path)
+    runtime.verify_files([{**recorded, 'stamp': [999999, *recorded['stamp'][1:]]}])
+    path.unlink()
+    path.write_bytes(b'same bytes in a fresh container\n')
+    assert runtime.stamp(path) != recorded['stamp']
+    runtime.verify_files([recorded])
+    path.write_bytes(b'same size but changed bytes....\n')
+    assert path.stat().st_size == recorded['stamp'][2]
+    with pytest.raises(runtime.RuntimeMismatch, match='changed or disappeared'):
+        runtime.verify_files([recorded])
+    path.unlink()
+    with pytest.raises(runtime.RuntimeMismatch, match='changed or disappeared'):
+        runtime.verify_files([recorded])
+
+
 def test_generated_templates_are_part_of_source_inventory(tmp_path):
     from applications.scoring import runtime
     import pytest
