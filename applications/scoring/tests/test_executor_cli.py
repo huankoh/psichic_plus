@@ -71,7 +71,10 @@ def run_screening(frame, *args):
         import subprocess
         import sys
         child = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(120)'])
-        Path(os.environ['CONTROLLED_DESCENDANT']).write_text(str(child.pid))
+        marker = Path(os.environ['CONTROLLED_DESCENDANT'])
+        pending = marker.with_suffix('.pending')
+        pending.write_text(str(child.pid))
+        pending.replace(marker)
     with open(os.environ['CONTROLLED_CALLS'], 'a') as log:
         log.write(json.dumps({'engine': 'psichic', 'pid': os.getpid(), 'rows': frame.ID.tolist()}) + '\\n')
     os.write(1, b'controlled native fd stdout progress\\n')
@@ -220,7 +223,7 @@ def test_killed_coordinator_does_not_redispatch_live_owned_worker(runtime):
                                env=runtime['env'], cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     owner = None
     try:
-        wait_for(lambda: calls(runtime))
+        wait_for(lambda: calls(runtime), timeout=180)
         invocation = next((runtime['run'] / 'local/invocations').iterdir())
         owner = read(invocation / 'owner.json')
         process.kill()
@@ -469,7 +472,7 @@ def test_killed_owner_stops_model_group_and_resume_creates_new_attempt(runtime, 
     process = subprocess.Popen([sys.executable, '-B', '-m', 'applications.scoring', *args],
                                env=runtime['env'], cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     try:
-        wait_for(lambda: calls(runtime))
+        wait_for(lambda: calls(runtime), timeout=180)
         invocation = next((runtime['run'] / 'local/invocations').iterdir())
         owner, child = read(invocation / 'owner.json'), read(invocation / 'child.json')
         os.kill(owner['pid'], signal.SIGKILL)
@@ -498,7 +501,7 @@ def test_interruption_reaps_owned_processes_and_resumes(runtime, sig):
     process = subprocess.Popen([sys.executable, '-B', '-m', 'applications.scoring', *runtime['args']],
                                env=runtime['env'], cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     try:
-        wait_for(lambda: calls(runtime))
+        wait_for(lambda: calls(runtime), timeout=180)
         invocation = next((runtime['run'] / 'local/invocations').iterdir())
         owner, child = read(invocation / 'owner.json'), read(invocation / 'child.json')
         process.send_signal(sig)
@@ -739,7 +742,7 @@ def test_owner_and_model_hard_kill_leave_no_descendant(runtime):
                                env=runtime['env'], cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     descendant = owner = model = None
     try:
-        wait_for(lambda: marker.exists())
+        wait_for(lambda: marker.exists(), timeout=180)
         invocation = next((runtime['run'] / 'local/invocations').iterdir())
         owner, model = read(invocation / 'owner.json'), read(invocation / 'child.json')
         descendant = process_identity(int(marker.read_text()))
