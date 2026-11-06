@@ -164,13 +164,13 @@ def publish(directory):
     atomic_pointer(directory / 'published.json', {'request_digest': digest(request), 'completed': True})
 
 
-def own(directory, *, salvage=False):
+def own(directory, *, salvage=False, registered=False):
     with exclusive(directory / 'owner.lock'):
         if salvage:
             publish(directory)
             return 0
         atomic_pointer(directory / 'owner.json', process_identity(os.getpid()))
-        if sys.stdin.buffer.readline() != b'GO\n':
+        if not registered and sys.stdin.buffer.readline() != b'GO\n':
             return 125
         request = read_request(directory)
         interrupted = False

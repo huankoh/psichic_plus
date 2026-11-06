@@ -61,7 +61,7 @@ def native_options(profile):
     return tokens
 
 
-def prepare_invocation(run, runtime, engine, rows):
+def prepare_invocation(run, runtime, engine, rows, *, ownership=Ownership.LOCAL):
     profile = runtime['profiles'][engine.value]
     verify_files(profile['source'] + profile['weights'])
     options = loads(getattr(run.settings, engine.value + '_options'))
@@ -89,7 +89,7 @@ def prepare_invocation(run, runtime, engine, rows):
                                   run.settings.required_output if engine is Engine.PSICHIC else Output.AFFINITY, 'single', ())
         declarations.append((row.key, fingerprint))
         mapping.append({'entry_key': row.key, 'native_key': native.key, 'native_row': index, 'input': filename})
-    tasks = run.prepare(engine, declarations, ownership=Ownership.LOCAL)
+    tasks = run.prepare(engine, declarations, ownership=ownership)
     directory = run.path / 'local' / 'invocations' / tasks[0].invocation_id
     for task, item in zip(tasks, mapping, strict=True):
         item['attempt_id'] = task.attempt_id
@@ -104,7 +104,9 @@ def prepare_invocation(run, runtime, engine, rows):
                'native_command': native_command, 'fasta': str(run.path / 'inputs/target.fasta'),
                'timeout': options.get('timeout'), 'controls': runtime['controls'],
                'target_assets': [{'path': str(run.path / 'inputs' / a['copy']), 'sha256': a['sha256']}
-                                 for a in runtime['target_assets']]}
+                                 for a in runtime['target_assets']] +
+                                [{'path': str(run.path / 'inputs' / name), 'sha256': checksum(run.path / 'inputs' / name)}
+                                 for name in ('target.fasta', 'target.yaml')]}
     write_file(prepared / 'request.json', canonical(request) + '\n')
     write_file(prepared / 'profile.json', canonical(profile) + '\n')
     write_file(prepared / 'mapping.json', canonical(mapping) + '\n')

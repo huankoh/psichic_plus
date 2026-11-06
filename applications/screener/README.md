@@ -5,6 +5,10 @@ This adapter adds `docking_scenario_methods=psichic_plus` to [AdaptiveFlow-VS re
 It scores native per-ligand `.smi` archives and leaves collection selection to the upstream workflow.
 Affinities are model predictions, not experimental measurements.
 
+For durable final scoring, including Boltz-only, full ensemble, global pyramid selection, resume, and explicit retry, use the [screening CLI](SCORING.md).
+It prepares native workunits with externally owned attempts and qualified receipts while preserving AdaptiveFlow scheduler ownership.
+The legacy affinity-only workflow below remains available independently.
+
 ## Install on the submission host and every worker
 
 Use a working PSICHIC+ environment from this repository, including its installed `psichic-ligand` package, matching RDKit build, PyTorch, and ESM model access.

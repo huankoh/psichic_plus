@@ -3,38 +3,18 @@ from argparse import Namespace
 from dataclasses import dataclass
 import gc
 import math
-from numbers import Real
 import os
 import sys
 from pathlib import Path
 
 from applications.scorer import (
-    BetaDistribution,
-    DistributionFailure,
     DistributionNotRequested,
     DistributionOutcome,
     Failure,
     Output,
     Success,
+    distribution_outcome as _distribution_outcome,
 )
-
-
-def _distribution_outcome(affinity: float, alpha, beta) -> BetaDistribution | DistributionFailure:
-    try:
-        if any(not isinstance(value, Real) or isinstance(value, bool) for value in (alpha, beta)):
-            raise ValueError("Alpha and beta must be native numeric parameters")
-        distribution = BetaDistribution(float(alpha), float(beta))
-    except (TypeError, ValueError, OverflowError) as error:
-        return DistributionFailure(str(error), repr(alpha), repr(beta))
-    # Match the native ratio-first formula without overflowing 12 * alpha.
-    expected_affinity = 12.0 * (distribution.alpha / distribution.concentration)
-    if not math.isclose(affinity, expected_affinity, rel_tol=1e-6, abs_tol=1e-6):
-        return DistributionFailure(
-            f"Affinity {affinity!r} is inconsistent with 12 * alpha / (alpha + beta) "
-            f"({expected_affinity!r})",
-            repr(alpha), repr(beta),
-        )
-    return distribution
 
 
 @dataclass(frozen=True)

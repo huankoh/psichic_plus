@@ -1,4 +1,30 @@
-> Historical verification from the original pull request, before relocation to `applications/`.
+# Durable screening integration, 2026-11-06
+
+The author CPU qualification passed 28 checks against the real pinned Linux AFVS preparation and worker, with controlled predictions and qualified runtime evidence.
+Native workers ran under Python 3.10.14 and launched the separate Python 3.12 inference supervisor.
+All six configurations passed: PSICHIC-only, Boltz-only, full concentration-v1, global K=2 concentration-v1, global K=2 refinement, and full rank-v1.
+The four-entry population retained duplicate names across collections and a repeated identical source pair across multiple workunits.
+The final follow-up passed two additional checks for legacy `rank --source-run` and installed packaging.
+An old native affinity of 99 remained metadata while the fresh qualified observation supplied affinity 6.
+
+The fault cases passed owner-death cleanup, live-process reconciliation guards, explicit stopped recovery, sparse selection across bounded preparation windows, retry with immutable report history, and shortage with zero Boltz workunits.
+Transfer checks passed short copies, idempotent redelivery, contradictory delivery rejection, superseded attempts, wrong run identity, artifact tampering, missing loaded-runtime evidence, and zero-exit overview rejection.
+Installed console and module validation ran outside the checkout, with human and JSON output, invalid-option errors, no inference during validation, and actual Python 3.10 worker imports.
+The rich legacy transport retained valid affinity when same-pass distribution validation failed.
+
+A separate saved-artifact audit checked 392 artifact references across seven completed runs, reproduced standalone scores and selections from identical saved observations, and matched the hash-verified original concentration formula at `1e-12`.
+All model observations in this author qualification were controlled test values.
+No trained-model GPU inference or live scheduler submission was performed in this unit.
+The CPU containers had no GPU device request, network disabled, and read-only source, image root, model assets, and dependency mounts.
+Independent GPU and deployment qualification remain separate work.
+
+The source-level reproduction entry points are `tests/test_integration.py`, `tests/test_transfers.py`, `tests/test_packaging.py`, and `tests/compare_saved.py`.
+Set `AFVS_TEST_UPSTREAM` to the pinned reference and `AFVS_WORKER_PYTHON` to the dependency-equipped Python 3.10 native worker.
+The controlled Boltz fixture can use `CONTROLLED_BOLTZ_PYTHON` for its isolated interpreter.
+Exact commands, immutable source snapshots, retained failures, raw native archives, process records, and the unexecuted independent A100 handoff are in the project-wrapper evidence directory `evidence/integration-20261106/screener-integration-implementation`.
+See [SCORING.md](SCORING.md) for the deployment boundary and public commands.
+
+> The remaining sections are historical verification from the original pull request, before relocation to `applications/`.
 > Commands and paths below describe that earlier layout.
 
 # Native verification evidence
