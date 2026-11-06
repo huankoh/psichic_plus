@@ -18,16 +18,13 @@ from .run import ScoringRun
 
 class Parser(argparse.ArgumentParser):
     def error(self, message):
-        raise ConfigurationError('ARGUMENTS', message, 'Read psichic rank --help and correct the arguments.')
+        raise ConfigurationError('ARGUMENTS', message, f'Read {self.prog} --help and correct the arguments.')
 
 
-def parser():
-    result = Parser(prog='psichic', description='Rank candidates with durable PSICHIC+ and optional isolated Boltz predictions.',
-                    allow_abbrev=False)
-    result.add_argument('--json', action='store_true', help='One versioned JSON envelope on stdout.')
-    sub = result.add_subparsers(dest='action', required=True, parser_class=Parser)
-    rank = sub.add_parser('rank', help='Validate and start a new frozen scoring run.', allow_abbrev=False)
-    rank.add_argument('--candidates', type=Path, required=True)
+def add_rank_arguments(rank, *, candidates=True):
+    """Share the resolved scoring contract with application adapters."""
+    if candidates:
+        rank.add_argument('--candidates', type=Path, required=True)
     rank.add_argument('--id-column', default='ID')
     rank.add_argument('--smiles-column', default='SMILES')
     target = rank.add_mutually_exclusive_group(required=True)
@@ -58,6 +55,15 @@ def parser():
     rank.add_argument('--validate-only', action='store_true', help='Inspect inputs, cached assets, dependencies and defaults without inference or run creation.')
     rank.add_argument('--json', action='store_true', default=argparse.SUPPRESS)
     rank.add_argument('boltz_options', nargs=argparse.REMAINDER, help='Explicit native prediction options after --. No MSA, authentication, or owned-path overrides.')
+
+
+def parser():
+    result = Parser(prog='psichic', description='Rank candidates with durable PSICHIC+ and optional isolated Boltz predictions.',
+                    allow_abbrev=False)
+    result.add_argument('--json', action='store_true', help='One versioned JSON envelope on stdout.')
+    sub = result.add_subparsers(dest='action', required=True, parser_class=Parser)
+    rank = sub.add_parser('rank', help='Validate and start a new frozen scoring run.', allow_abbrev=False)
+    add_rank_arguments(rank)
     for name, help_text in [('resume', 'Continue pending or confirmed stopped work.'),
                             ('retry', 'Explicitly retry recorded failures, preserving old attempts.'),
                             ('status', 'Read the latest stored report and current completion counts.')]:
@@ -154,7 +160,8 @@ def human_configuration(settings, target, entries):
         print(f'PSICHIC display: {settings.psichic_output.value}; required evidence: {settings.required_output.value}')
     counts = {engine.value: settings.shortlist_size if engine is Engine.BOLTZ and settings.pyramid else entries
               for engine in settings.engines}
-    print('Evaluations: ' + ', '.join(f'{engine}={count}' for engine, count in counts.items()))
+    print('Evaluations: ' + ', '.join(f'{engine}={count if count is not None else "unknown until generation completes"}'
+                                    for engine, count in counts.items()))
     if settings.pyramid:
         print('Boltz starts only after K eligible PSICHIC entries; a shortage starts no Boltz jobs.')
     for engine in settings.engines:
@@ -162,13 +169,17 @@ def human_configuration(settings, target, entries):
     print('Evaluation counts describe work, not a runtime estimate.', flush=True)
 
 
+def reject_msa_authentication(argv):
+    if any(token.split('=', 1)[0] in ('--msa_server_password', '--msa_server_username', '--api_key_value', '--api_key_header') for token in argv):
+        raise ConfigurationError('NATIVE_OPTION', 'MSA authentication options are not accepted in single-sequence mode')
+
+
 def main(argv=None):
     argv = list(sys.argv[1:] if argv is None else argv)
     json_mode = '--json' in argv
     run = None
     try:
-        if any(token.split('=', 1)[0] in ('--msa_server_password', '--msa_server_username', '--api_key_value', '--api_key_header') for token in argv):
-            raise ConfigurationError('NATIVE_OPTION', 'MSA authentication options are not accepted in single-sequence mode')
+        reject_msa_authentication(argv)
         args = parser().parse_args(argv)
         json_mode = args.json
         if args.action == 'rank':

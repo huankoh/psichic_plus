@@ -130,7 +130,7 @@ class LocalPlan:
     source: Path
     id_column: str
     smiles_column: str
-    row_count: int
+    row_count: int | None
     target: Target
     settings: Settings
     document: dict
@@ -155,7 +155,7 @@ def _path(value):
     return str(Path(value).expanduser().absolute())
 
 
-def resolve(args):
+def resolve(args, *, future_population=False):
     uses_p, uses_b = args.mode != 'boltz-only', args.mode != 'psichic-only'
     unused = (('model_dir', 'psichic_device', 'psichic_cache', 'esm_checkpoint', 'batch_size', 'psichic_output', 'psichic_chain')
               if not uses_p else ('boltz_python', 'boltz_cache', 'boltz_timeout') if not uses_b else ())
@@ -182,7 +182,7 @@ def resolve(args):
     output, source = Path(_path(args.output)), Path(_path(args.candidates))
     if output.exists():
         raise ConfigurationError('OUTPUT_EXISTS', f'Output already exists: {output}', 'Use resume for that run, or choose a fresh output path.')
-    count = sum(1 for _ in candidates(source, args.id_column, args.smiles_column))
+    count = None if future_population else sum(1 for _ in candidates(source, args.id_column, args.smiles_column))
     target = NativeTarget.load(fasta=args.fasta, native=args.target_yaml, ligand_id=args.ligand_id, msa_mode='single')
     if not uses_b and args.target_yaml:
         raise ConfigurationError('UNUSED_TARGET', 'PSICHIC-only takes one FASTA; native complex settings require Boltz')
@@ -266,7 +266,7 @@ def resolve(args):
                         boltz_options=canonical(b_options) if b_options else None)
     runtime = {'schema_version': 1, 'preset': args.preset, 'profiles': profiles, 'controls': controls,
                'seed': args.seed, 'chunk_size': args.chunk_size, 'overrides': overrides,
-               'candidate_sha256': checksum(source), 'source': str(source), 'id_column': args.id_column,
+               'candidate_sha256': None if future_population else checksum(source), 'source': str(source), 'id_column': args.id_column,
                'smiles_column': args.smiles_column, 'target_document': document, 'ligand_id': target.ligand_id,
                'target_assets': assets}
     return LocalPlan(output, source, args.id_column, args.smiles_column, count, retained_target, settings,

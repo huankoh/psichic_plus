@@ -20,10 +20,14 @@ from .run import ScoringRun
 from .runtime import checksum, native_support, verify_files
 
 
-def create_run(plan):
+def create_run(plan, *, entries=None):
+    if plan.row_count is None:
+        raise ConfigurationError('FUTURE_POPULATION', 'Generation preflight cannot create a scoring run without completed products')
     plan.output.parent.mkdir(parents=True, exist_ok=True)
-    run = ScoringRun.create(plan.output, candidates(plan.source, plan.id_column, plan.smiles_column),
+    run = ScoringRun.create(plan.output, entries if entries is not None else candidates(plan.source, plan.id_column, plan.smiles_column),
                             target=plan.target, settings=plan.settings)
+    if run.row_count != plan.row_count:
+        raise ConfigurationError('POPULATION_CHANGED', 'The imported population differs from preflight. Preserve this directory and create a new run.')
     retain_inputs(plan, run)
     local = run.path / 'local'
     local.mkdir()
