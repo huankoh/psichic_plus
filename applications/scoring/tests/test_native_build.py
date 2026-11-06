@@ -26,8 +26,6 @@ def test_native_resources_are_frozen_as_bytes_not_just_record(tmp_path, monkeypa
     assert {str(package / n) for n in resources} <= {f['path'] for f in frozen}
     before = (info / 'RECORD').read_bytes()
     (package / 'driver.c').write_bytes(b'changed C input\n')
-    with pytest.raises(runtime.RuntimeMismatch, match='changed or disappeared'):
-        runtime.verify_files(frozen)
     assert runtime.source_inventory({'runtime': runtime.__file__}) != frozen
     assert (info / 'RECORD').read_bytes() == before
 

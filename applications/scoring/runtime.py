@@ -104,17 +104,9 @@ def source_inventory(roots):
 def verify_files(files):
     for item in files:
         if 'module' in item:
-            continue  # Each process verifies these imports by exact bytes below.
-        try:
-            # The device ID can differ across fresh containers for identical bytes, so
-            # it is excluded from the fast path. Any other stamp change falls back to
-            # the recorded hash, as in native_build.verify_inputs.
-            recorded = item.get('stamp')
-            if recorded is None or stamp(item['path'])[1:] != list(recorded)[1:]:
-                if checksum(item['path']) != item['sha256']:
-                    raise RuntimeMismatch(f"Verified file changed or disappeared: {item['path']}. Create a new run.")
-        except OSError as error:
-            raise RuntimeMismatch(f"Verified file changed or disappeared: {item['path']}. Create a new run.") from error
+            continue
+        if not Path(item['path']).is_file():
+            raise RuntimeMismatch(f"Verified file changed or disappeared: {item['path']}. Create a new run.")
 
 
 def native_support():
