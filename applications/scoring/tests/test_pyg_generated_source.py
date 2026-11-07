@@ -47,6 +47,7 @@ if mode == 'preflight':
         profile = runtime.inspect_psichic({'model_dir': str(directory / 'weights'), 'device': 'cpu',
                                           'esm_checkpoint': str(directory / 'weights/esm.pt')})
     assert all(name not in sys.modules for name in names)
+    assert 'adaptive_screening_inference' in profile['loaded']
     assert not torch.cuda.is_initialized()
     assert {item['module'] for item in profile['generated_source']} == set(names)
     templates = {item['name'] for item in profile['source'] if item['path'].endswith('.jinja')}

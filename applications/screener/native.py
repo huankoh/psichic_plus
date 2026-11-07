@@ -46,6 +46,9 @@ def copy_tools(source, destination):
             if (source / name).read_bytes() != subprocess.check_output(['git', '-C', str(source), 'show', f'{REVISION}:{name}']):
                 raise ConfigurationError('AFVS_SOURCE', f'Pinned native interface changed: {name}')
         shutil.copytree(source / 'tools', destination / 'tools', ignore=shutil.ignore_patterns('__pycache__'))
+        for copied in (destination / 'tools', *(destination / 'tools').rglob('*')):
+            if not copied.is_symlink():
+                copied.chmod(copied.stat().st_mode | (0o700 if copied.is_dir() else 0o200))
         for name in TOUCHED:
             shutil.copyfile(expected / name, destination / name)
 

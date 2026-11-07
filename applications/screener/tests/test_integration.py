@@ -332,7 +332,16 @@ def test_native_global_shortage_creates_zero_boltz_tasks(boltz_runtime):
 
 def test_public_validation_has_no_run_or_inference(runtime):
     source = setup_runtime(runtime)
-    result, value = cli(runtime, arguments(runtime, source, extra=['--validate-only']))
+    tools = source / 'tools'
+    modes = {}
+    for path in sorted((p for p in tools.rglob('*') if not p.is_symlink()), key=lambda p: len(p.parts), reverse=True):
+        modes[path] = path.stat().st_mode
+        path.chmod(path.stat().st_mode & ~0o222)
+    try:
+        result, value = cli(runtime, arguments(runtime, source, extra=['--validate-only']))
+    finally:
+        for path, mode in sorted(modes.items(), key=lambda item: len(item[0].parts)):
+            path.chmod(mode)
     assert result.returncode == 0, value
     assert value['resolved']['entries'] == 4
     assert not runtime['run'].exists() and not calls(runtime)

@@ -130,14 +130,20 @@ Those paths receive no authorization and fail the loaded-source check if created
 
 Workers still require every loaded non-stdlib module to match an exact frozen path and hash.
 A file added after freezing fails even inside an inventoried package directory.
-A changed recorded file, unknown temporary generated module, or unrecorded late external module also fails.
+A changed loaded Python source, unknown temporary generated module, or unrecorded late external module also fails.
 Preflight-generated temporary modules retain their module identity and exact-byte check across processes.
 PSICHIC's three expected PyG modules retain their separately predicted exact-byte contract, including GCN fusion.
 Boltz 2.2.1 still requires its installed Python source to match its RECORD before preflight and execution.
 
 Installed optional packages are included even when the current prediction does not use them.
-Changing their inventoried source requires a new run.
+Changing their inventoried source before a later resume requires a new run.
 This avoids inferring which optional dependencies inference might load, at the cost of hashing the broader installed runtime during preflight.
+Recorded hashes do not make every asset immutable while a run is executing.
+`verify_files` requires recorded runtime files to exist before an invocation.
+It does not reread every source, weight, or resource file before each invocation.
+Runtime assets must therefore remain immutable from preflight until all workers finish.
+A later resume reprobes the runtime and refuses a changed profile.
+It cannot retroactively reject observations already accepted from an asset changed during execution.
 The contract does not attest arbitrary in-memory monkeypatches, every library loaded outside Python module specifications, or unlisted non-source data files.
 Validation remains offline and does not construct prediction models, deserialize checkpoints, initialize CUDA, or create a run directory.
 

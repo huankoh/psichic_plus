@@ -31,7 +31,13 @@ def load_helpers():
     sys.path.insert(0, str(screening))
     spec = importlib.util.spec_from_file_location("adaptive_screening_inference", screening / "inference.py")
     helpers = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(helpers)
+    sys.modules[spec.name] = helpers
+    try:
+        spec.loader.exec_module(helpers)
+    except BaseException:
+        if sys.modules.get(spec.name) is helpers:
+            del sys.modules[spec.name]
+        raise
     return helpers
 
 

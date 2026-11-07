@@ -2,6 +2,7 @@ import hashlib
 import sys
 from types import SimpleNamespace
 
+from applications.scorer.psichic_plus.predictor import load_helpers
 from applications.scorer.psichic_plus.provenance import source_provenance
 
 
@@ -27,3 +28,16 @@ def test_source_fingerprint_tracks_override_and_actual_loaded_modules(tmp_path, 
     assert hashes[str(cached_model)] == hashlib.sha256(cached_model.read_bytes()).hexdigest()
     inference.write_text("implementation = 3\n")
     assert source_provenance(predictor)["source_sha256"] != before["source_sha256"]
+
+
+def test_load_helpers_registers_the_screening_module(tmp_path, monkeypatch):
+    screening = tmp_path / "screening"
+    screening.mkdir()
+    (screening / "inference.py").write_text("value = 1\n")
+    monkeypatch.setenv("PSICHIC_SCREENING_DIR", str(screening))
+    monkeypatch.delitem(sys.modules, "adaptive_screening_inference", raising=False)
+
+    helpers = load_helpers()
+
+    assert helpers.value == 1
+    assert sys.modules["adaptive_screening_inference"] is helpers

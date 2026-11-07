@@ -21,11 +21,12 @@ For a task-owned `pip --target /absolute/install` smoke installation, set `PYTHO
 An ordinary environment installation needs no checkout path or `PYTHONPATH` setting.
 
 Prepare Boltz in a separate Python 3.12 environment.
-The local process guardian also requires psutil in that environment.
+For qualified Linux AMD64 execution, install the hash-locked dependency set used by the combined Docker image.
+That lock pins Boltz 2.2.1, Torch 2.7.1, Triton 3.3.1, and the psutil required by the local process guardian.
 
 ```sh
 python3.12 -m venv /opt/boltz
-/opt/boltz/bin/python -m pip install 'boltz==2.2.1' 'psutil>=5.9,<8'
+/opt/boltz/bin/python -m pip install -r ./applications/scorer/boltz2/requirements-boltz.lock
 ```
 
 ## Configure cached assets
