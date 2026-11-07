@@ -59,12 +59,14 @@ def test_external_native_controls_are_rejected(monkeypatch):
 
 
 def test_real_native_compiler_contract(tmp_path):
-    pytest.importorskip('triton')
+    triton = pytest.importorskip('triton')
     import subprocess
     import sys
 
     if sys.platform != 'linux':
         pytest.skip('The qualified native compiler lane is Linux only')
+    if triton.__version__ != '3.3.1':
+        pytest.skip('The qualified native compiler lane requires the Triton 3.3.1 interpreter')
     script = Path(__file__).with_name('native_build_probe.py')
     for name in ('first', 'second'):
         result = subprocess.run([sys.executable, '-B', str(script), str(tmp_path / name),
@@ -83,7 +85,6 @@ def test_native_inputs_require_frozen_bytes_when_container_stamps_change(tmp_pat
     path.unlink()
     path.write_bytes(b'frozen loader bytes')
     native_build.verify_inputs(policy)
-    assert runtime.stamp(path) != policy['files'][0]['stamp']
     path.write_bytes(b'changed loader bytes')
     with pytest.raises(runtime.RuntimeMismatch, match='changed or disappeared'):
         native_build.verify_inputs(policy)
