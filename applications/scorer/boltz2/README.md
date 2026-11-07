@@ -10,7 +10,7 @@ Ensemble modes offer `rank-v1` and `concentration-v1` and remain experimental.
 Omitting `--ensemble` preserves the existing `rank-v1` standalone default.
 Read [ranking and input rules](REFERENCE.md) before interpreting results.
 See [verification evidence and limits](VERIFICATION.md) for what has actually run.
-The [GPU handoff](HANDOFF.md) describes the remaining checks on `huan-main-a100`.
+The [GPU handoff](HANDOFF.md) retains the executed `huan-main-a100` check procedure.
 
 ## Install separate environments
 

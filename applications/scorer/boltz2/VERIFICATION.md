@@ -1,5 +1,64 @@
 # Verification record
 
+## PSICHIC+ and Boltz combo verification on 2026-11-06 and 2026-11-07
+
+This section records the merge-ready checks for the combined PSICHIC+ and Boltz branch.
+Each check below names the revision it actually ran.
+Evidence remains outside tracked source under `/Users/huanyeekoh/.t3/projects/psichic-workflow/evidence/integration-20261106/` on the authorized PC and under `/mnt/hykoh3/psichic-merge-ready-20261107/` and `/mnt/hykoh3/psichic-e2e-20261106/` on `ai-gpcr-1`.
+
+### Passed
+
+- At revision `10e1f5b33f8fd9fd3a3827c7dd8c88563ea0986b`, direct native Boltz and every durable mode exited 0 on the A100.
+  The modes were PSICHIC-only, Boltz-only, full ensemble, pyramid ensemble with K=1, and pyramid refinement with K=1.
+  Every reported Boltz score matched its retained native affinity JSON exactly.
+  The runs used single-sequence MSA mode, the quick-check preset, and seed 42.
+- At revision `8236e00`, the final native screening rerun passed its audits for every mode on the A100.
+  Full ensemble checked 584 artifact digests and the concentration formula.
+  Pyramid ensemble checked 246 digests, pyramid refinement checked 246 digests, Boltz-only checked 548 digests, rank-v1 checked 584 digests, and PSICHIC-only checked 36 digests.
+  The screening fixture used a genuinely read-only AFVS checkout.
+  Completed-run status and resume in fresh containers exited 0 with unchanged report hashes and invocation sets.
+- Two screening harness attempts were rejected by the local GPU gate on transient utilization samples with no compute processes and zero final GPU memory.
+  The preserved retries passed.
+  Those gate rejections were harness flakes, not product failures.
+- At revision `48f12cdf0d0696a15a001afe9956bb22db7e1f92`, both Docker images built and passed smoke tests on the A100 host.
+  The base image is `psichic-workflows:merge-ready-48f12cdf0d06`, ID `sha256:591913d37c2596aecc82299c418a507345f1f40e8227ee39cdc73e91950f89c0`.
+  The combined image is `psichic-boltz:merge-ready-48f12cdf0d06`, ID `sha256:e31204d477f41cb3e81dfd4c031da666b5b8cac5086493a01b6e1ee3f4f70318`.
+  Base smoke confirmed the installed CLIs, the ligand contract, clean dependencies, and the absence of Boltz in the coordinator environment.
+  Combined smoke confirmed Boltz 2.2.1, Torch 2.7.1+cu126, clean dependencies in both environments, and the recorded source revision.
+  The only change from `7531e95` to this revision is the `./applications` install path in `applications/Dockerfile`.
+- The broad local core suite passed 455 tests with 15 skipped before the final review fixes.
+  The root CI selection passed 417 tests locally.
+  The SyntheMol generator file passed all 30 tests on rerun with the pinned runtime overlay first on `PYTHONPATH`.
+  The first generator attempt failed 11 tests with `ModuleNotFoundError: No module named 'psichic_plus_synthemol'` because that overlay was missing.
+  The focused review-fix tests passed 4 tests and the Predictor slice passed 78 tests with 4 skipped after the read-only AFVS and helper-registration fixes.
+- At revision `48f12cdf0d0696a15a001afe9956bb22db7e1f92`, the full generator test suite passed 35 tests with 19 skipped inside the combined Docker image on the A100 host.
+  The controlled Boltz fixture used `CONTROLLED_BOLTZ_PYTHON=/opt/boltz/bin/python` and the container ran with the GPU driver files mounted.
+  Two earlier harness attempts failed five Boltz-mode tests each for those two missing setup settings, and those logs are retained.
+- Five additional local executor tests failed on the development Mac with 120-second subprocess timeouts while the machine load was between 49 and 88 from unrelated work.
+  The same test that failed in the first A100 container attempts passed individually once the qualified interpreter and GPU mount were present.
+- At revision `48f12cdf0d0696a15a001afe9956bb22db7e1f92`, the full core suite inside the combined Docker image on the A100 host reported 449 passed, 20 skipped, and 2 failed in 1855.99 seconds.
+  Both failures were in `applications/scoring/tests/test_native_build.py`.
+  The real native compiler contract ran under the coordinator Python, whose Triton is 3.2.0, instead of the qualified Triton 3.3.1 interpreter.
+  The stamp test asserted that unlinking and rewriting a file changes its filesystem stamp, and the A100 container filesystems returned identical stamps in 20 of 20 probes.
+  Neither failure showed a product error.
+- A test-only follow-up at revision `b4e013ac290e3579f910072f143e9c70efb8c9d4` skips the qualified lane under an unqualified Triton interpreter and removes the filesystem stamp assumption.
+  No product code changed in that commit.
+  After the fix, that test file passed 5 tests with 1 skipped on the Mac and inside the combined image.
+  The qualified contract passed on its own under `/opt/boltz/bin/python` inside the combined image.
+  Two direct native probe runs under that interpreter also passed with the same profile digest `23ece49f70238977c3ec9f5cd2673e006389803dab07820255fdd75e91a2e13d`.
+  A parallel Mac core rerun was stopped after 35 passes with no failures shown, so it is not counted as a completed suite.
+
+### Limits
+
+Quick-check sampling proves execution and native score parsing only.
+It does not prove normal-sampling prediction quality, ranking quality, or scientific accuracy.
+Live cluster scheduling, cross-host or S3 coordination, and multi-replica screening remain unqualified.
+Only one AdaptiveFlow replica is supported.
+`verify_files` now requires recorded runtime files to exist and does not compare their contents.
+Runtime assets must therefore remain immutable during execution.
+Loaded Python source is still verified, and a later resume still reprobes the recorded profile.
+No remote MSA service was used, upstream Boltz source was not modified, and no FEP or ABFE was implemented.
+
 ## GPU verification on 2026-11-05
 
 The GPU continuation tested handoff revision `988358b641c5a2fa16084bc8481fd6cfbca99504` on host `ai-gpcr-1`, reached through the authorized `Huan-MainA100` SSH alias.

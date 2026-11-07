@@ -1,3 +1,16 @@
+# Final A100 screening rerun, 2026-11-07
+
+At revision `8236e00`, the final native screening rerun passed its audits for every mode on `ai-gpcr-1`.
+Full ensemble checked 584 artifact digests and the concentration formula.
+Pyramid ensemble checked 246 digests, pyramid refinement checked 246 digests, Boltz-only checked 548 digests, rank-v1 checked 584 digests, and PSICHIC-only checked 36 digests.
+The fixture used a genuinely read-only AFVS checkout with modes 555 and 444.
+Completed-run status and resume in fresh containers exited 0 with unchanged report hashes and invocation sets.
+Two harness attempts were rejected by the local GPU gate on transient utilization samples with no compute processes and zero final GPU memory.
+The preserved retries passed.
+These runs used quick-check sampling and prove execution, transfer, and score handling only.
+They do not prove normal-sampling prediction quality, live cluster scheduling, or multi-replica screening.
+Evidence remains outside tracked source under `/mnt/hykoh3/psichic-merge-ready-20261107/screener-final` on the server and in the project evidence copy at `evidence/integration-20261106/merge-ready-20261107/screener-final`.
+
 # Durable screening integration, 2026-11-06
 
 The author CPU qualification passed 28 checks against the real pinned Linux AFVS preparation and worker, with controlled predictions and qualified runtime evidence.

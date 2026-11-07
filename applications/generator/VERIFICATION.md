@@ -43,6 +43,9 @@ Fresh status and resume containers reproduced completed reports without inferenc
 Those checks used one recorded A100, quick-check Boltz sampling, no MSA server, and no Docker rebuild.
 Normal-sampling quality and scientific ranking quality remain unqualified.
 Docker images must be rebuilt from the exact source revision being released.
+For this branch, both images were rebuilt and smoke-tested at revision `48f12cdf0d0696a15a001afe9956bb22db7e1f92`.
+The generator CLI was part of the passing base-image smoke test.
+See the [combo verification record](../scorer/boltz2/VERIFICATION.md) for image IDs and smoke details.
 
 > Historical verification from the original pull request follows.
 > Commands and paths below describe the earlier layout before relocation to `applications/`.
