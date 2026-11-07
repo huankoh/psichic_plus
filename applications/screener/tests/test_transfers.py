@@ -9,8 +9,10 @@ from applications.scoring import Acceptance, Engine, Ownership, Resolution
 from applications.scoring.tests.conftest import prepare, transfer as core_transfer
 from applications.scoring.contracts import canonical, digest, loads
 from applications.scoring.evidence import Artifact, Receipt
-from applications.scoring.runtime import identity
+from applications.scoring.runtime import checksum, identity
+from applications.scoring.worker import publish
 from applications.screener.native import ingest
+from applications.screener.worker import execute
 
 pytest_plugins = ['applications.scoring.tests.conftest']
 
@@ -41,6 +43,92 @@ def delivery(run, source, *, name='1'):
     with tarfile.open(path, 'w:gz') as archive:
         archive.add(source, arcname='0/collection/collection/row/0/receipt')
     return path
+
+
+def invocation(root, task):
+    source = core_transfer(root / 'observed', task)
+    receipt = Receipt.from_json((source / 'receipt.json').read_bytes())
+    directory = root / 'invocation'
+    for name in ('inputs', 'raw', 'transfers'):
+        (directory / name).mkdir(parents=True)
+    name = task.entry_key + '.json'
+    (directory / 'inputs' / name).write_bytes((source / 'input.txt').read_bytes())
+    mapping = [{'entry_key': task.entry_key, 'attempt_id': task.attempt_id,
+                'native_row': 1, 'native_key': 'row_00000001', 'input': name}]
+    profile = {'engine_version': 'controlled', 'source': [], 'weights': [], 'environment': {}, 'device': 'cpu', 'precision': 'controlled'}
+    request = {'engine': 'psichic', 'tasks': [task.to_dict()], 'mapping': mapping, 'target_assets': [], 'profile': profile}
+    for name, value in [('request.json', request), ('profile.json', profile), ('mapping.json', mapping),
+                        ('completion.json', loads((source / 'execution.json').read_bytes())),
+                        ('loaded.json', {'profile_digest': digest(identity(profile)), 'loaded': {'controlled': {}}})]:
+        (directory / name).write_text(canonical(value))
+    for name in ('stdout.log', 'stderr.log'):
+        (directory / name).write_bytes((source / name).read_bytes())
+    (directory / 'raw' / f'{task.attempt_id}.json').write_text(canonical({
+        'record': loads(receipt.record_json), 'raw': loads((source / 'raw.json').read_bytes())}))
+    manifest = {'schema_version': 1, 'invocation': str(directory), 'request_sha256': checksum(directory / 'request.json'),
+                'run_id': task.run_id, 'population_digest': task.population_digest, 'engine': 'psichic', 'rows': [{'key': task.entry_key}]}
+    map_path = root / f'{digest(manifest)}.json'
+    map_path.write_text(canonical(manifest))
+    return map_path, directory
+
+
+@pytest.mark.parametrize('interruptions', [1, 3])
+def test_export_recovers_repeated_publication_before_marker(make_run, tmp_path, interruptions):
+    run = make_run(n=1)
+    task, = prepare(run, ownership=Ownership.EXTERNAL)
+    map_path, directory = invocation(tmp_path, task)
+    for _ in range(interruptions):
+        publish(directory)
+        (directory / 'published.json').unlink()
+    output = tmp_path / 'export'
+    execute(map_path, task.entry_key, output)
+    assert len(list((directory / 'transfers').glob('*/receipt.json'))) == interruptions + 1
+    assert run.accept(output / 'receipt') is Acceptance.ACCEPTED
+    execute(map_path, task.entry_key, tmp_path / 'redelivery')
+    assert run.accept(tmp_path / 'redelivery/receipt') is Acceptance.IDENTICAL
+    assert run.finalize().status.value == 'complete'
+    assert list(run.results())[0]['psichic']['raw']['raw_affinity'] == 6
+
+
+def test_export_rejects_contradictory_receipts_after_republication(make_run, tmp_path):
+    run = make_run(n=1)
+    task, = prepare(run, ownership=Ownership.EXTERNAL)
+    map_path, directory = invocation(tmp_path, task)
+    publish(directory)
+    raw_path = directory / 'raw' / f'{task.attempt_id}.json'
+    row = loads(raw_path.read_bytes())
+    row['record'].update(raw_affinity=7, adaptive_score=-7)
+    row['raw']['native']['predicted_binding_affinity'] = 7
+    raw_path.write_text(canonical(row))
+    (directory / 'published.json').unlink()
+    output = tmp_path / 'export'
+    with pytest.raises(ValueError):
+        execute(map_path, task.entry_key, output)
+    assert not (output / 'receipt').exists()
+    assert next(run.diagnostics()).state.value == 'submitted'
+
+
+@pytest.mark.parametrize('copies', [1, 2])
+@pytest.mark.parametrize('damage', ['missing', 'truncated', 'tampered'])
+def test_export_rejects_missing_or_corrupt_artifacts(make_run, tmp_path, copies, damage):
+    run = make_run(n=1)
+    task, = prepare(run, ownership=Ownership.EXTERNAL)
+    map_path, directory = invocation(tmp_path, task)
+    for index in range(copies):
+        if index:
+            (directory / 'published.json').unlink()
+        publish(directory)
+    artifact = next((directory / 'transfers').iterdir()) / 'raw_psichic'
+    original = artifact.read_bytes()
+    if damage == 'missing':
+        artifact.unlink()
+    else:
+        artifact.write_bytes(original[:20] if damage == 'truncated' else b'x' * len(original))
+    output = tmp_path / 'export'
+    with pytest.raises((OSError, ValueError)):
+        execute(map_path, task.entry_key, output)
+    assert not (output / 'receipt').exists()
+    assert next(run.diagnostics()).state.value == 'submitted'
 
 
 def test_short_native_copy_never_accepts_then_complete_redelivery_is_idempotent(make_run, tmp_path):
