@@ -4,7 +4,7 @@ This handoff was executed on 2026-11-05.
 See the [GPU verification results](VERIFICATION.md#gpu-verification-on-2026-11-05) for completed native inference, exact parsing checks, all four real workflows, both Docker images, and remaining limits.
 The instructions below retain the original reproduction procedure.
 
-The implementation is ready for GPU verification, and the PR must remain a draft until the outstanding checks are assessed.
+At handoff time, the implementation was ready for GPU verification, and the PR was to remain a draft until the outstanding checks were assessed.
 Use a PC with an existing authorized connection to `huan-main-a100`.
 The development session could not reach that server and performed no GPU work there.
 
@@ -37,7 +37,7 @@ Independent review findings were corrected for YAML merges, mixed custom and aut
 The real upstream example reached CPU structure prediction but timed out after 360 seconds without structures or affinity scores.
 Two bounded coordinator runs verified actual subprocess isolation and explicit timeout failures with retained row identity and null scores.
 Neither Docker image was built because Docker was unavailable on the development Mac.
-Completed GPU inference and numerical comparison with a native result remain open.
+Completed GPU inference and numerical comparison with a native result remained open at handoff time.
 
 ## Run the GPU checks
 

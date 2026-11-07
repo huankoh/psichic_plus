@@ -173,7 +173,8 @@ docker run --rm psichic-boltz2:2.2.1 /opt/boltz/bin/boltz predict --help
 
 Run the full ensemble on a Linux CUDA host with a driver compatible with the locked PyTorch CUDA runtime.
 The lock currently uses CUDA 12.6 libraries in the Boltz environment.
-Docker builds and GPU inference have not been verified on the development Mac.
+GPU execution requires a Linux CUDA host.
+The retained verification record reports Docker and GPU results for the exact tested source revisions.
 
 ```bash
 docker run --rm --gpus all \

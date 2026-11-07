@@ -36,7 +36,13 @@ The shared installation and pinned reference source remain unchanged.
 Evidence is retained outside tracked source at `/Users/huanyeekoh/.t3/projects/psichic-workflow/evidence/integration-20261106/generator-integration-implementation`.
 It contains source manifests, exact commands and subprocess logs, original native products, accepted controlled receipts, comparison results, decision records, and the final process audit.
 `independent-handoff.md` and `verify_real_generator.py` specify the parent's real-weight A100 checks, including generation-to-scoring process order, GPU-release observation, saved-prediction parity, and completed resume.
-Independent code review, real generator inference integration, continuous GPU-release observation, normal-sampling quality, scientific ranking quality, and rebuilt images remain pending.
+A later independent verification at tested revision `72ad34319c49525c0db4334027827e0e801f816a` passed the scoped real A100 generator checks.
+All four final-scoring modes completed with real generation and retained complete prediction coverage for two unique generated molecules.
+The generated and standalone finalizations agreed exactly on identical saved predictions.
+Fresh status and resume containers reproduced completed reports without inference.
+Those checks used one recorded A100, quick-check Boltz sampling, no MSA server, and no Docker rebuild.
+Normal-sampling quality and scientific ranking quality remain unqualified.
+Docker images must be rebuilt from the exact source revision being released.
 
 > Historical verification from the original pull request follows.
 > Commands and paths below describe the earlier layout before relocation to `applications/`.

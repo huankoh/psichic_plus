@@ -197,9 +197,10 @@ Existing import-time temporary modules still require their pre-recorded identity
 If inference dynamically loads an additional package absent from that inventory, acceptance fails explicitly.
 That runtime needs a qualified preflight update before its outputs can be reused.
 Boltz retains its installed-RECORD and loaded-source checks and has no new dynamic-source authorization.
-This contract does not qualify real Boltz model construction or GPU execution.
-Those fixtures are not trained-model inference evidence.
-The [generator adapter](../generator/README.md) now imports native products and offers automatic final scoring through this executor.
-Its author-controlled native and subprocess checks are distinct from pending independent real-model generator integration.
-GPU qualification of the shared executor has separate retained evidence and does not qualify the new generator boundary automatically.
-Rebuilt Docker images, independent generator review and GPU verification, and the distributed AdaptiveFlow adapter remain separate units.
+Those controlled fixtures are not trained-model inference evidence.
+Retained A100 evidence separately qualifies real Boltz and PSICHIC+ execution with quick-check sampling for the tested source revisions.
+That evidence does not establish normal-sampling scientific quality.
+The [generator adapter](../generator/README.md) imports native products and offers automatic final scoring through this executor.
+Its independent real-model A100 verification is recorded separately from the shared executor fixtures.
+Docker images must be rebuilt from the exact source revision being released.
+The distributed AdaptiveFlow deployment remains a separate qualification from this local executor.
