@@ -2,6 +2,7 @@
 
 import argparse
 from importlib.resources import files
+import os
 from pathlib import Path
 import subprocess
 import tempfile
@@ -33,7 +34,14 @@ def install(checkout):
                 target.parent.mkdir(parents=True, exist_ok=True)
                 target.write_bytes(git("show", f"{REVISION}:{path}").stdout)
             applied = subprocess.run(
-                ["git", "apply", "-"], cwd=directory, input=patch, capture_output=True
+                ["git", "apply", "-"],
+                cwd=directory,
+                input=patch,
+                capture_output=True,
+                env=dict(
+                    os.environ,
+                    GIT_CEILING_DIRECTORIES=str(Path(directory).resolve().parent),
+                ),
             )
             if applied.returncode:
                 raise ValueError(applied.stderr.decode())

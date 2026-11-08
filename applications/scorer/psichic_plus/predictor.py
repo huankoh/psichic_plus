@@ -1,0 +1,166 @@
+import importlib.util
+from argparse import Namespace
+from dataclasses import dataclass
+import gc
+import math
+import os
+import sys
+from pathlib import Path
+
+from applications.scorer import (
+    DistributionNotRequested,
+    DistributionOutcome,
+    Failure,
+    Output,
+    Success,
+    distribution_outcome as _distribution_outcome,
+)
+
+
+@dataclass(frozen=True)
+class PredictionEvidence:
+    outcome: Success | Failure
+    native: dict
+
+
+def load_helpers():
+    """Import the selected screening implementation without loading models."""
+    screening = Path(os.environ.get(
+        "PSICHIC_SCREENING_DIR", Path(__file__).resolve().parents[3] / "psichic_plus_screening",
+    )).resolve()
+    sys.path.insert(0, str(screening))
+    spec = importlib.util.spec_from_file_location("adaptive_screening_inference", screening / "inference.py")
+    helpers = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = helpers
+    try:
+        spec.loader.exec_module(helpers)
+    except BaseException:
+        if sys.modules.get(spec.name) is helpers:
+            del sys.modules[spec.name]
+        raise
+    return helpers
+
+
+def _load_local_esm(pretrained, checkpoint):
+    import torch
+
+    checkpoint = Path(checkpoint)
+    # ESM checkpoints store configuration as Namespace alongside tensor weights.
+    with torch.serialization.safe_globals([Namespace]):
+        model_data = torch.load(checkpoint, map_location="cpu", weights_only=True)
+        regression_data = torch.load(checkpoint.with_name(checkpoint.stem + "-contact-regression.pt"),
+                                     map_location="cpu", weights_only=True)
+    return pretrained.load_model_and_alphabet_core(checkpoint.stem, model_data, regression_data)
+
+
+def _protein_state(fasta, device):
+    import featurizers
+    import torch
+
+    _, sequence = fasta
+    esm_checkpoint = os.environ.get("PSICHIC_ESM_CHECKPOINT")
+    if esm_checkpoint is not None:
+        model, alphabet = _load_local_esm(featurizers.esm.pretrained, esm_checkpoint)
+    else:
+        model, alphabet = featurizers.esm.pretrained.load_model_and_alphabet("esm2_t33_650M_UR50D")
+    model.eval()
+    model.to(device)
+    sequence = featurizers.replace_non_standard_residues(sequence, featurizers.pro_res_table)
+    sequence_features = featurizers.seq_feature(sequence)
+    tokens, contacts, _ = featurizers.esm_extract(
+        model, alphabet.get_batch_converter(), sequence, layer=33, approach="last", dim=1280,
+    )
+    edge_index, edge_weight = featurizers.contact_map(contacts)
+    protein = {
+        "seq": sequence,
+        "seq_feat": torch.from_numpy(sequence_features),
+        "token_representation": tokens.half(),
+        "num_nodes": len(sequence),
+        "num_pos": torch.arange(len(sequence)).reshape(-1, 1),
+        "edge_index": edge_index,
+        "edge_weight": edge_weight,
+    }
+    del model
+    if device.type == "cuda":
+        with torch.cuda.device(device):
+            torch.cuda.empty_cache()
+    gc.collect()
+    return {"target": protein}
+
+
+class Predictor:
+    def __init__(self, fasta: str, model_dir: str, device: str, cache: str, batch_size: int):
+        import torch
+
+        self.helpers = load_helpers()
+        torch.set_num_threads(int(os.environ.get("OMP_NUM_THREADS", "1")))
+        self.device = torch.device(device)
+        self.cache = Path(cache)
+        self.cache.mkdir(parents=True, exist_ok=True)
+        self.batch_size = batch_size
+        self.fasta = self.helpers.read_single_fasta(Path(fasta))
+        self.proteins = _protein_state(self.fasta, self.device)
+        self.protein_folder = None
+        strategies = self.helpers.resolve_inference_preset("fast_screening", "pyg_to_dense", "pyg_dense_mincut", "none")
+        self.model = self.helpers.PSICHICPlusModel.from_pretrained(
+            model_dir, device=self.device,
+            **{key: value for key, value in strategies.items() if key != "inference_preset"},
+        )
+
+    def score(
+        self, inputs: list[tuple[str, str]], *, output: Output | str = Output.AFFINITY,
+    ) -> list[Success | Failure]:
+        return [item.outcome for item in self.score_with_evidence(inputs, output=output)]
+
+    def score_with_evidence(
+        self, inputs: list[tuple[str, str]], *, output: Output | str = Output.AFFINITY,
+    ) -> list[PredictionEvidence]:
+        """Return each outcome and its native row captured before policy cleanup."""
+        output = Output(output)
+
+        import pandas as pd
+
+        tokens = {str(index): token for index, (token, _) in enumerate(inputs)}
+        frame = pd.DataFrame({"ID": list(tokens), "smiles": [smiles for _, smiles in inputs]})
+        frame = self.helpers.prepare_input_frame(frame, "smiles", self.fasta, "target")
+        frame = self.helpers.initialize_output_columns(frame)
+        loader, *_ = self.helpers.build_loader(
+            frame, self.proteins, self.protein_folder, self.cache, self.cache / "ligands",
+            self.batch_size, 0, False, False, str(self.device), True, "input_order", False,
+        )
+        frame, *_ = self.helpers.run_screening(
+            frame, self.model, loader, self.proteins, loader.dataset.ligands, self.cache,
+            self.device, False, False, "fp32", False, False, "thread", False,
+        )
+        native_rows = frame.to_dict(orient="records")
+        if list(frame.ID) != list(tokens):
+            raise ValueError("Native predictions changed the exact input row identity or order")
+        if "predicted_binding_affinity" not in frame:
+            frame["predicted_binding_affinity"] = pd.NA
+        if "inference_status" not in frame:
+            frame["inference_status"] = "success"
+        else:
+            frame["inference_status"] = frame["inference_status"].fillna("success")
+        # Native completeness requires distribution fields even for affinity-only output.
+        missing_affinity = frame["predicted_binding_affinity"].isna() & frame["inference_status"].eq("success")
+        if missing_affinity.any():
+            diagnosed, _ = self.helpers.apply_invalid_ligand_policy(frame.loc[missing_affinity].copy(), "emit_null")
+            for column in ("inference_status", "failure_stage", "failure_reason"):
+                frame.loc[missing_affinity, column] = diagnosed[column]
+        results = []
+        for row, native in zip(frame.itertuples(index=False), native_rows, strict=True):
+            token = tokens[row.ID]
+            if row.inference_status == "success":
+                affinity = float(row.predicted_binding_affinity)
+                if math.isfinite(affinity):
+                    distribution: DistributionOutcome = DistributionNotRequested()
+                    if output is Output.DISTRIBUTION:
+                        distribution = _distribution_outcome(
+                            affinity, native.get("reg_alpha"), native.get("reg_beta"),
+                        )
+                    results.append(Success(token, affinity, -affinity, distribution))
+                else:
+                    results.append(Failure(token, "prediction", "Non-finite affinity"))
+            else:
+                results.append(Failure(token, str(row.failure_stage), str(row.failure_reason)))
+        return [PredictionEvidence(outcome, native) for outcome, native in zip(results, native_rows, strict=True)]

@@ -10,11 +10,12 @@ license = {file = "LICENSE"}
 requires-python = ">=3.10"
 
 [tool.setuptools]
-packages = ["psichic_adaptiveflow", "psichic_adaptiveflow._screening"]
+packages = ["psichic_adaptiveflow", "psichic_adaptiveflow._screening", "psichic_adaptiveflow._outcomes"]
 
 [tool.setuptools.package-dir]
 psichic_adaptiveflow = "psichic_adaptiveflow"
 "psichic_adaptiveflow._screening" = "../../psichic_plus_screening"
+"psichic_adaptiveflow._outcomes" = "../scorer"
 
 [tool.setuptools.package-data]
 psichic_adaptiveflow = ["native.patch", "COPYING"]

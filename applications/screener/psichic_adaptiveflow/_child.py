@@ -1,3 +1,4 @@
+import math
 import os
 import sys
 
@@ -9,6 +10,7 @@ import threading
 import time
 
 from .adapter import MAX_FRAME
+from .protocol import decode_request, distribution
 
 
 def watch_parent():
@@ -61,7 +63,7 @@ def main():
             return
         if len(data) > MAX_FRAME or not data.endswith(b"\n"):
             raise ValueError("Invalid or oversized request frame")
-        smiles = json.loads(data)
+        smiles, requested_output = decode_request(json.loads(data))
         if (
             not isinstance(smiles, list)
             or not smiles
@@ -118,16 +120,40 @@ def main():
             "thread",
             False,
         )
-        result, _ = screening.apply_invalid_ligand_policy(result, "emit_null")
+        if "predicted_binding_affinity" not in result:
+            result["predicted_binding_affinity"] = pd.NA
+        if "inference_status" not in result:
+            result["inference_status"] = "success"
+        else:
+            result["inference_status"] = result["inference_status"].fillna("success")
+        # Native completeness also requires alpha and beta, so diagnose only rows
+        # without an affinity. Bad distribution fields keep a finite affinity.
+        missing_affinity = result["predicted_binding_affinity"].isna() & result["inference_status"].eq("success")
+        if missing_affinity.any():
+            diagnosed, _ = screening.apply_invalid_ligand_policy(result.loc[missing_affinity].copy(), "emit_null")
+            for column in ("inference_status", "failure_stage", "failure_reason"):
+                result.loc[missing_affinity, column] = diagnosed[column]
         rows = []
         for position, row in result.iterrows():
             if row["inference_status"] == "success":
+                affinity = float(row["predicted_binding_affinity"])
+                if not math.isfinite(affinity):
+                    rows.append(
+                        {
+                            "position": int(position),
+                            "stage": "prediction",
+                            "reason": "Non-finite affinity",
+                        }
+                    )
+                    continue
                 rows.append(
                     {
                         "position": int(position),
-                        "affinity": float(row["predicted_binding_affinity"]),
+                        "affinity": affinity,
                     }
                 )
+                if requested_output == 'distribution':
+                    rows[-1]['distribution'] = distribution(rows[-1]['affinity'], row.get('reg_alpha'), row.get('reg_beta'))
             else:
                 rows.append(
                     {
@@ -136,7 +162,8 @@ def main():
                         "reason": str(row["failure_reason"]),
                     }
                 )
-        response = json.dumps(rows, allow_nan=False).encode() + b"\n"
+        response_value = rows if requested_output == 'affinity' else {'schema_version': 1, 'output': requested_output, 'rows': rows}
+        response = json.dumps(response_value, allow_nan=False).encode() + b"\n"
         if len(response) > MAX_FRAME:
             raise ValueError("Oversized response frame")
         sent = 0

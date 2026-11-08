@@ -1,24 +1,10 @@
-# Score molecules with PSICHIC+
+# Scoring applications
 
-The scorer loads a protein target and PSICHIC+ model once, then scores batches of molecule IDs and SMILES.
-Run from the repository root in the existing PSICHIC+ environment.
+[PSICHIC+](psichic_plus/README.md) provides the existing predictor used by SyntheMol.
+[Boltz-2](boltz2/README.md) adds optional native scoring and four ranking workflows.
+Boltz runs in its own environment and is not required by PSICHIC+, SyntheMol, or AdaptiveFlow.
 
-```python
-from applications.scorer.predictor import Predictor
-
-predictor = Predictor(
-    fasta="/inputs/target.fasta",
-    model_dir="/weights/PSICHIC_plus",
-    device="cpu",
-    cache="/outputs/cache",
-    batch_size=32,
-)
-results = predictor.score([("aspirin", "CC(=O)Oc1ccccc1C(=O)O"), ("caffeine", "Cn1c(=O)c2c(ncn2C)n(C)c1=O")])
-for result in results:
-    print(result)
-```
-
-Successful results contain the original ID and predicted affinity.
-Failures contain the original ID, stage, and reason.
-Larger raw affinity values indicate stronger predicted binding.
-The AdaptiveFlow integration uses its own process-managed scorer to honor native worker timeouts.
+The canonical PSICHIC+ import is `applications.scorer.psichic_plus.predictor.Predictor`.
+The legacy `applications.scorer.predictor` module remains an alias with the same constructor and result types.
+Shared `Success` and `Failure` types remain in `applications.scorer`.
+AdaptiveFlow retains its separate process-managed adapter and native interface.

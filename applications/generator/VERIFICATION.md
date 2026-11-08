@@ -1,7 +1,56 @@
-> Historical verification from the original pull request, before relocation to `applications/`.
-> Commands and paths below describe that earlier layout.
+# Generator final scoring verification
 
-# Native SyntheMol fidelity verification
+The generator integration adds explicit native-product import and an automatic process-completion barrier over the shared durable scorer.
+The CLI and completion boundaries are documented in [the generator guide](README.md).
+The implementation author ran these checks with controlled prediction outputs and the actual pinned SyntheMol launcher.
+They are not independent trained-model or GPU integration qualification.
+No GPU inference, SSH, Docker build, or shared-environment installation was performed in this unit.
+
+The first generator subprocess run passed all 17 checks.
+It exercised existing-run import, exact native columns and source strings, duplicate rows, malicious IDs, schema errors, source mutation, clean JSON, four optional Boltz modes, future and existing-population validation, native generation failure, cancellation, coordinator death, and completed or interrupted-handoff resume.
+The four finalization comparisons used the identical saved predictions and population in the shared standalone coordinator.
+All compared scores and ranks agreed, with maximum absolute score difference `0.0`.
+The checks do not compare independently rerun stochastic predictions.
+
+The broader applications regression completed with 483 passed, 8 skipped, and one native-scorer readiness timeout.
+The timeout included preflight and native startup in one 60-second readiness deadline, before the controlled scorer wrote its marker.
+The test now waits separately for native-process registration and scorer readiness while retaining its cancellation and descendant-shutdown deadlines.
+The eight skips were four authorized-weight Predictor cases, the Linux-only native compiler lane, and three opt-in AdaptiveFlow upstream checks.
+The run retained one existing PyG distributed-module deprecation warning.
+The broader run covered native launcher signature and flag parity, native output parity, all application scoring modes, durable persistence and scale, receipts, runtime inventories, process recovery, and private installed CLI use.
+
+Author review reproduced a late-cancellation defect through the CLI by delivering SIGINT immediately after successful completion publication.
+The fix stops dependent scoring and keeps the completed-product snapshot available to explicit resume.
+A focused follow-up checks that exact boundary, modified-product rejection on resume, cancellation and coordinator death, shared authentication-option rejection, ordinary-run human status, and installed commands.
+All 14 selected follow-up checks passed, with 63 unrelated cases deselected.
+That result includes both installed entry points and console help from a rebuilt private target outside the checkout.
+Ruff over `applications` with the existing E402 exception and `git diff --check` passed on the final source.
+
+Packaging uses a copied build source and private `pip --target` destination.
+Both `psichic-generator rank` and `python -m applications.generator rank` run outside the checkout through the real durable executor with controlled inference.
+The installed package retains the checked patch, installer inputs, and open-example CSV, FASTA, and maps.
+No native SyntheMol installation is required for existing-product ranking.
+The native-generation checks use the existing read-only baseline overlay because the shared installed SyntheMol has an obsolete adapter import.
+The shared installation and pinned reference source remain unchanged.
+
+Evidence is retained outside tracked source at `/Users/huanyeekoh/.t3/projects/psichic-workflow/evidence/integration-20261106/generator-integration-implementation`.
+It contains source manifests, exact commands and subprocess logs, original native products, accepted controlled receipts, comparison results, decision records, and the final process audit.
+`independent-handoff.md` and `verify_real_generator.py` specify the parent's real-weight A100 checks, including generation-to-scoring process order, GPU-release observation, saved-prediction parity, and completed resume.
+A later independent verification at tested revision `72ad34319c49525c0db4334027827e0e801f816a` passed the scoped real A100 generator checks.
+All four final-scoring modes completed with real generation and retained complete prediction coverage for two unique generated molecules.
+The generated and standalone finalizations agreed exactly on identical saved predictions.
+Fresh status and resume containers reproduced completed reports without inference.
+Those checks used one recorded A100, quick-check Boltz sampling, no MSA server, and no Docker rebuild.
+Normal-sampling quality and scientific ranking quality remain unqualified.
+Docker images must be rebuilt from the exact source revision being released.
+For this branch, both images were rebuilt and smoke-tested at revision `48f12cdf0d0696a15a001afe9956bb22db7e1f92`.
+The generator CLI was part of the passing base-image smoke test.
+See the [combo verification record](../scorer/boltz2/VERIFICATION.md) for image IDs and smoke details.
+
+> Historical verification from the original pull request follows.
+> Commands and paths below describe the earlier layout before relocation to `applications/`.
+
+## Historical native SyntheMol fidelity verification
 
 This record supersedes the earlier verification descriptions on this branch.
 Those descriptions validated a reduced wrapper that filtered reactions with empty slots and used a separate score-vector wrapper.

@@ -34,6 +34,7 @@ class ScoreInput:
 @dataclass(frozen=True)
 class Affinity:
     value: float
+    distribution: dict | None = None
 
     def __post_init__(self):
         if not math.isfinite(self.value):
@@ -100,7 +101,7 @@ class Target:
 
 def validate_preparation(config):
     for index, method in enumerate(config["docking_scenario_methods"]):
-        if method != "psichic_plus":
+        if method not in ("psichic_plus", "boltz2"):
             continue
         if config["ligand_library_format"] != "smi":
             raise ValueError("psichic_plus requires native per-ligand .smi archives")
@@ -115,11 +116,23 @@ def validate_preparation(config):
             or int(config["docking_scenario_replicas"][index]) < 1
         ):
             raise ValueError("PSICHIC+ batch size and replica count must be positive")
-        Target.read(
-            Path(config["docking_scenario_basefolder"])
+        scenario_config = (Path(config["docking_scenario_basefolder"])
             / config["docking_scenario_names"][index]
-            / "config.txt"
-        )
+            / "config.txt")
+        if scenario_config.read_text().lstrip().startswith('{'):
+            from .external import configuration
+            external = configuration(scenario_config)
+            expected = 'boltz' if method == 'boltz2' else 'psichic'
+            if external['engine'] != expected or int(config['docking_scenario_replicas'][index]) != 1:
+                raise ValueError('External scoring requires a matching engine and one replica')
+            if config['job_storage_mode'] != 'sharedfs' or config['data_storage_mode'] != 'sharedfs':
+                raise ValueError('External scoring supports only same-host sharedfs')
+            if int(config['threads_to_use']) != 1:
+                raise ValueError('Use threads_to_use=1 for one isolated invocation per native allocation')
+        elif method == 'boltz2':
+            raise ValueError('Boltz requires a prepared external scoring configuration')
+        else:
+            Target.read(scenario_config)
 
 
 def validate_collection_key(value):
@@ -316,12 +329,14 @@ class Scorer:
         )
 
     def score(
-        self, inputs: list[ScoreInput], timeout: float
+        self, inputs: list[ScoreInput], timeout: float, *, output="affinity"
     ) -> list[Affinity | Failure]:
         deadline = time.monotonic() + timeout
         try:
+            from .protocol import request, validate_distribution
+
             payload = (
-                json.dumps([entry.smiles for entry in inputs], allow_nan=False).encode()
+                json.dumps(request([entry.smiles for entry in inputs], output), allow_nan=False).encode()
                 + b"\n"
             )
             if len(payload) > MAX_FRAME:
@@ -371,6 +386,10 @@ class Scorer:
             ):
                 raise ValueError("PSICHIC+ child returned an invalid response frame")
             rows = json.loads(received)
+            if output == 'distribution':
+                if not isinstance(rows, dict) or set(rows) != {'schema_version', 'output', 'rows'} or type(rows['schema_version']) is not int or rows['schema_version'] != 1 or rows['output'] != output:
+                    raise ValueError('Unsupported rich-output response protocol')
+                rows = rows['rows']
             if not isinstance(rows, list) or len(rows) != len(inputs):
                 raise ValueError("PSICHIC+ child returned the wrong result count")
             results = [None] * len(inputs)
@@ -387,7 +406,15 @@ class Scorer:
                         raise ValueError(
                             "PSICHIC+ child returned a nonnumeric affinity"
                         )
-                    results[position] = Affinity(float(row["affinity"]))
+                    affinity = float(row["affinity"])
+                    detail = None
+                    if output == 'distribution':
+                        try:
+                            detail = validate_distribution(affinity, row.get('distribution'))
+                        except ValueError as error:
+                            detail = {'state': 'distribution-failure', 'reason': 'Protocol: ' + str(error),
+                                      'raw_alpha': 'None', 'raw_beta': 'None'}
+                    results[position] = Affinity(affinity, detail)
                 else:
                     results[position] = Failure(str(row["reason"]), str(row["stage"]))
             if time.monotonic() > deadline:
@@ -416,6 +443,9 @@ class Scorer:
 
 
 def complete_batch(batch, scenario, scorers, setup, clean, temp_dir):
+    if Path(scenario['config']).read_text().lstrip().startswith('{'):
+        from .external import complete_batch as external_batch
+        return external_batch(batch, scenario, scorers, setup, clean, temp_dir)
     items = batch["items"]
     ready = []
     inputs = []

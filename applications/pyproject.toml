@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "psichic-workflows"
+version = "0.1.0"
+description = "Durable local PSICHIC+ ranking with optional isolated Boltz"
+requires-python = ">=3.11"
+dependencies = ["PyYAML>=6,<7", "psutil>=5.9,<8"]
+
+[project.scripts]
+psichic = "applications.scoring.__main__:main"
+psichic-generator = "applications.generator.cli:main"
+psichic-screener = "applications.screener.cli:main"
+
+[tool.setuptools]
+packages = ["applications", "applications.generator", "applications.generator.example", "applications.scoring", "applications.screener", "applications.scorer", "applications.scorer.psichic_plus", "applications.scorer.boltz2", "psichic_plus_screening"]
+
+[tool.setuptools.package-dir]
+applications = "."
+"applications.generator" = "generator"
+"applications.generator.example" = "generator/example"
+"applications.scoring" = "scoring"
+"applications.screener" = "screener"
+"applications.scorer" = "scorer"
+"applications.scorer.psichic_plus" = "scorer/psichic_plus"
+"applications.scorer.boltz2" = "scorer/boltz2"
+psichic_plus_screening = "../psichic_plus_screening"
+
+[tool.setuptools.package-data]
+"applications.generator" = ["patches/*.patch", "patches/*.md", "example/*.csv", "example/*.fasta", "example/*.pkl", "requirements.txt", "constraints.txt"]

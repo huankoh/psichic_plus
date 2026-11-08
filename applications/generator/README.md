@@ -25,6 +25,18 @@ Supply your own authorized CSV and trusted reaction-map pickle files.
 Native default resource paths therefore do not exist in this installation.
 Keep this repository on Python's import path when using the installed `psichic_plus` scorer.
 
+Install the workflow CLI separately to rank existing products without SyntheMol.
+This command installs no model or native generator dependency.
+
+```bash
+python -m pip install --no-deps --no-build-isolation ./applications
+python -m applications.generator rank --help
+```
+
+The wheel includes the generator adapter, checked patch, installer inputs, and open example resources.
+Prepare the [shared scoring dependencies and offline caches](../scoring/CLI.md) before final inference.
+The native generator remains optional when you rank an already-produced file.
+
 ## Prepare building-block scores
 
 Native generation requires one precomputed CSV column for every score, including PSICHIC+.
@@ -93,6 +105,138 @@ Reserve that ID for intermediates in your catalogue.
 Upstream logs reaction `7_2` as `7`, and the CSV can display it as `7.0`.
 That native output loses the sub-reaction suffix; the adapter preserves this behavior.
 Identical products from different spaces share a native node and can retain only one route.
+
+## Rank completed native products
+
+Use an explicit import after you have confirmed that native generation finished.
+`--source-run` reads that directory's `molecules.csv`.
+The native CSV has no trustworthy process-completion marker, so this command records your completion claim rather than claiming to verify the earlier process.
+It rejects malformed or empty product populations and detects source changes during import.
+Run it after the native writer has stopped.
+
+```bash
+psichic-generator rank \
+  --source-run runs/generation \
+  --fasta /inputs/target.fasta --msa-mode single \
+  --mode psichic-only --model-dir /weights/PSICHIC_plus \
+  --esm-checkpoint /cache/esm2_t33_650M_UR50D.pt \
+  --output runs/final-ranking --validate-only
+```
+
+Remove `--validate-only` to import and score the completed products.
+The Python module equivalent is `python -m applications.generator rank` with the same arguments.
+All scoring options come from the [shared rank interface](../scoring/CLI.md).
+Defaults are native `node_id` and `smiles` columns, with explicit `--id-column` and `--smiles-column` overrides.
+The importer retains exact strings, row order, duplicate IDs, duplicate structures, and every native output column.
+Each row has a bounded internal key, its original file and row locator, and the native byte digest.
+User IDs never become artifact paths.
+
+The final stage rescores products because native search scores lack the full model, batch, loaded-source, and same-pass receipt provenance.
+It never infers alpha or beta from a search affinity or joins values from separate attempts.
+Compatible accepted receipts resume through the shared durable contract.
+Native search scores, routes, and building-block columns stay in metadata and in `inputs/molecules.csv`.
+The importer cannot recover routes or sub-reaction identifiers already lost by native deduplication or serialization.
+It never overwrites the source `molecules.csv`.
+
+Choose `boltz-only`, `full-ensemble`, `pyramid-ensemble`, or `pyramid-refinement` to opt into Boltz final scoring.
+These choices rank the completed products and do not change search.
+Refinement with binder probability remains the suggested starting workflow.
+Supply K explicitly for either pyramid mode.
+
+```bash
+psichic-generator rank \
+  --source-run runs/generation \
+  --fasta /inputs/target.fasta --msa-mode single \
+  --mode pyramid-refinement --shortlist-size 100 \
+  --rank-by affinity_probability_binary \
+  --output runs/refined-products
+```
+
+Model paths may use the shared documented environment variables.
+An explicitly chosen ensemble defaults to `concentration-v1`, which requires same-pass PSICHIC distribution evidence and Boltz affinity.
+`--ensemble rank-v1` retains weighted average rank support.
+Incompatible metrics and manual concentration weights fail before inference.
+`--psichic-output distribution` changes displayed detail, while concentration ensembles always retain the required distribution evidence.
+`--preset normal` remains the default.
+Use `--preset quick-check` explicitly for reduced sampling integration checks.
+Only single-sequence MSA is supported and no sequence goes to a remote MSA service.
+
+## Generate and score automatically
+
+The opt-in wrapper runs the complete native launcher in a separate owned process.
+The native parser accepts its existing underscore flags and defaults after `--native-args`.
+The wrapper requires a fresh native `--save_dir` and a search objective that includes `psichic_plus`.
+Native signs, weights, caches, and search remain native behavior.
+The separate final scoring mode never supplies Boltz feedback to search.
+
+```bash
+psichic-generator generate-and-rank \
+  --fasta /inputs/target.fasta --msa-mode single \
+  --mode pyramid-refinement --shortlist-size 100 \
+  --output runs/generation-workflow \
+  --native-args \
+  --search_type mcts --save_dir runs/new-generation \
+  --score_types psichic_plus \
+  --score_model_paths /weights/PSICHIC_plus \
+  --score_names psichic_affinity \
+  --psichic_target_fasta /inputs/target.fasta \
+  --building_blocks_paths /inputs/scored_blocks.csv \
+  --reaction_to_building_blocks_paths /inputs/real_map.pkl \
+  --chemical_spaces real --n_rollout 100 --rng_seed 0
+```
+
+Put shared native Boltz overrides after `--` and before `--native-args`, for example `-- --accelerator gpu --devices 1 --native-args ...`.
+The generation and selected final-scoring protein sequence must agree.
+For a final PSICHIC stage, the resolved cached ESM checkpoint also configures the native child.
+For Boltz-only final scoring, configure the native search checkpoint with `PSICHIC_ESM_CHECKPOINT`.
+Prepare every required cache offline before execution.
+The wrapper starts no installer or downloader and denies network access in its native child.
+Use an offline configuration for optional native services such as W&B.
+The original native launch and `score-building-blocks` commands keep their behavior.
+
+The workflow saves native logs and process identities under `runs/generation-workflow/generation`.
+It observes the actual exit status, retires the entire owned process group, and binds a product snapshot digest to successful completion.
+Only then can the final stage start in `runs/generation-workflow/scoring`.
+This process boundary retires the search predictor before final inference can use the allocation.
+Cancellation or generation failure stops dependent scoring and retains logs.
+The pipe guard and group guardian stop owned descendants if the coordinator disappears.
+No unrelated process is signaled.
+
+Add `--validate-only` before `--native-args` to preflight the future workflow without generation, inference, or output creation.
+Future validation checks native argument parsing, the target, scoring dependencies, and resolved settings.
+It reports unknown product counts rather than validating a population that does not yet exist.
+Existing-run validation parses the actual population and reports its row count.
+The automatic boundary proves an observed successful native process, not experimental binding, synthesis success, or upstream search correctness.
+
+## Read and recover final results
+
+Human output identifies the native source and explains that the report ranks completed products with search unchanged.
+The scoring directory contains `generation.json`, `generation.md`, the frozen native CSV, and the shared durable scoring state.
+Read `latest.json` for immutable ranked `summary.md`, `results.csv`, and `results.json` paths.
+The full reports retain original source locators and all native metadata alongside final scores and accepted receipts.
+Counts, failures, shortlist shortages, and singleton or tied populations use the shared reporting rules.
+
+```bash
+psichic-generator status --run runs/generation-workflow
+psichic-generator resume --run runs/generation-workflow
+psichic-generator retry --run runs/generation-workflow --failed --engine boltz
+psichic resume --run runs/generation-workflow/scoring
+```
+
+The first three commands also accept a scoring directory created by an explicit import.
+Resume never reruns generation, including after a completed final report.
+If generation succeeded but final scoring was interrupted before initialization, resume uses the saved completion and product digest to initialize the final directory.
+It refuses an unconfirmed, failed, cancelled, or modified generation output.
+Changed scoring runtime or settings requires an explicit new import.
+An incomplete scoring-directory creation is retained as evidence and needs a new scoring path through `rank --source-run`.
+Retry of failed predictions remains explicit and preserves earlier attempts and reports.
+Recovery is limited to the original POSIX host, paths, and qualified local filesystem assumptions of the shared executor.
+
+`--json` emits one schema-versioned stdout envelope.
+Native progress stays in logs and coordinator progress goes to stderr.
+An automatic response includes the recoverable workflow and scoring directories even when final inference is interrupted.
+Exit 0 means complete or validated, exit 1 means incomplete execution or cancelled generation, and exit 2 means invalid input or recovery configuration.
+Use `rank --help` or `generate-and-rank --help` for the full scoring options.
 
 ## Use native catalogue and failure behavior
 

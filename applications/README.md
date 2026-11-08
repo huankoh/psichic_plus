@@ -1,9 +1,10 @@
 # PSICHIC+ applications
 
-These applications use the existing PSICHIC+ predictor.
+These applications use PSICHIC+ and an optional isolated Boltz-2 scorer.
 
-- [scorer](scorer/): load a target and model once and score molecules in batches.
-- [generator](generator/): use PSICHIC+ to guide native SyntheMol generation.
+- [PSICHIC+ scorer](scorer/psichic_plus/): load a target and model once and score molecules in batches.
+- [Boltz-2 workflows](scorer/boltz2/): run Boltz alone, a full rank ensemble, or either of two PSICHIC+ shortlist workflows.
+- [generator](generator/): use PSICHIC+ to guide native SyntheMol generation and optionally rank completed products through the shared durable scorer.
 - [screener](screener/): use PSICHIC+ in native AdaptiveFlow-VS screening workunits.
 
 ## Shared Docker image
@@ -22,6 +23,8 @@ The CUDA image can also run a workflow on CPU by selecting `cpu` and omitting `-
 Provide your own model weights, target sequence, input data, and ESM cache as mounted volumes when running a workflow.
 See the individual application guides for their inputs and commands.
 The image does not include model weights or SyntheMol catalogue data.
+It does not install Boltz.
+The [combined image guide](scorer/boltz2/README.md#build-the-combined-image) describes the separate PSICHIC+ and Boltz-2 image.
 AdaptiveFlow workers need access to the image and the same input files.
 
 For example, prepare SyntheMol building-block scores with a target and weights you provide.

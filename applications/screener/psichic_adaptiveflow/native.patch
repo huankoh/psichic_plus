@@ -1,11 +1,11 @@
 diff --git a/tools/afvs_prepare_folders.py b/tools/afvs_prepare_folders.py
-index d6e70a8..30a75b0 100755
+index d6e70a8..b8414aa 100755
 --- a/tools/afvs_prepare_folders.py
 +++ b/tools/afvs_prepare_folders.py
 @@ -1,5 +1,7 @@
  #!/usr/bin/env python3
  
-+# Modified 2026-11-01 to validate opt-in PSICHIC+ scenarios.
++# Modified 2026-11-06 to validate opt-in PSICHIC+ and Boltz scenarios.
 +# Copyright (C) 2026 PSICHIC+ contributors
  # Copyright (C) 2019 Christoph Gorgulla
  # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
@@ -14,7 +14,7 @@ index d6e70a8..30a75b0 100755
      config = parse_config("templates/all.ctrl")
  
  
-+    if 'psichic_plus' in config['docking_scenario_methods']:
++    if any(m in ('psichic_plus', 'boltz2') for m in config['docking_scenario_methods']):
 +        from psichic_adaptiveflow.adapter import validate_preparation
 +        validate_preparation(config)
 +
@@ -22,13 +22,13 @@ index d6e70a8..30a75b0 100755
      error = check_parameters(config)
  
 diff --git a/tools/templates/afvs_run.py b/tools/templates/afvs_run.py
-index da82718..40bf914 100755
+index da82718..006fe39 100755
 --- a/tools/templates/afvs_run.py
 +++ b/tools/templates/afvs_run.py
 @@ -1,5 +1,7 @@
  #!/usr/bin/env python3
  
-+# Modified 2026-11-01 for opt-in PSICHIC+ native scoring, identity, and lifecycle.
++# Modified 2026-11-06 for opt-in PSICHIC+ and Boltz scoring, identity, and lifecycle.
 +# Copyright (C) 2026 PSICHIC+ contributors
  # Copyright (C) 2019 Christoph Gorgulla
  # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
@@ -59,7 +59,7 @@ index da82718..40bf914 100755
          for replica_index in range(scenario['replicas']):
  
              ligand_directory_directory = Path(temp_dir) / "output" / scenario_key / ligand_name / str(replica_index)
-+            if scenario['program'] == 'psichic_plus':
++            if scenario['program'] in ('psichic_plus', 'boltz2'):
 +                ligand_directory_directory = Path(temp_dir) / "output" / scenario_key / base_collection_key / collection_key / ligand_name / str(replica_index)
              ligand_directory_directory.mkdir(parents=True, exist_ok=True)
  
@@ -78,9 +78,9 @@ index da82718..40bf914 100755
  
  def docking_process(ctx, docking_queue, summary_queue):
  
-+    if 'psichic_plus' in ctx['main_config']['docking_scenario_methods']:
-+        from psichic_adaptiveflow.adapter import complete_batch
-+        DOCKING_PROGRAMS['psichic_plus'] = {'ligands': 'batch', 'native_batch': complete_batch}
++    if any(m in ('psichic_plus', 'boltz2') for m in ctx['main_config']['docking_scenario_methods']):
++        from psichic_adaptiveflow.external import register
++        register(DOCKING_PROGRAMS)
 +    scorers = {}
 +    try:
 +        docking_worker(ctx, docking_queue, summary_queue, scorers)
@@ -146,7 +146,7 @@ index da82718..40bf914 100755
  
                  if(single_item['status'] == "success"):
                      summary_key = f"{single_item['ligand_key']}"
-+                    if single_item['program'] == 'psichic_plus':
++                    if single_item['program'] in ('psichic_plus', 'boltz2'):
 +                        summary_key = (single_item['collection_key'], single_item['ligand_key'])
  
                      if summary_key not in summary_data[single_item['scenario_key']]:
@@ -164,28 +164,29 @@ index da82718..40bf914 100755
  
              # Now we can generate a parquet file with all of the data
              df = pd.DataFrame.from_dict(summary_data[scenario_key], "index")
-+            if ctx['main_config']['docking_scenarios'][scenario_key]['program'] == 'psichic_plus':
++            if ctx['main_config']['docking_scenarios'][scenario_key]['program'] in ('psichic_plus', 'boltz2'):
 +                df = df.reset_index(drop=True)
  
              upload_tmp_dir = tempfile.mkdtemp(prefix=tmp_dir)
  
-@@ -4112,6 +4147,11 @@ def process(ctx):
+@@ -4112,6 +4147,12 @@ def process(ctx):
      # Update some of the path information
  
      process_config(ctx)
-+    if 'psichic_plus' in ctx['main_config']['docking_scenario_methods']:
-+        from psichic_adaptiveflow.adapter import complete_batch, validate_preparation
-+        DOCKING_PROGRAMS['psichic_plus'] = {'ligands': 'batch', 'native_batch': complete_batch}
++    if any(m in ('psichic_plus', 'boltz2') for m in ctx['main_config']['docking_scenario_methods']):
++        from psichic_adaptiveflow.adapter import validate_preparation
++        from psichic_adaptiveflow.external import register
++        register(DOCKING_PROGRAMS)
 +        validation_config = dict(ctx['main_config'], docking_scenario_basefolder=str(Path(ctx['temp_dir']) / 'af_input' / 'input-files'))
 +        validate_preparation(validation_config)
  
      ctx['workunit_id'] = workunit_id
      ctx['subjob_id'] = subjob_id
-@@ -4204,6 +4244,7 @@ def process(ctx):
+@@ -4204,6 +4245,7 @@ def process(ctx):
              download_item = {
                  'collection_key': collection_key,
                  'collection': collection,
-+                'psichic_plus': 'psichic_plus' in ctx['main_config']['docking_scenario_methods'],
++                'psichic_plus': any(m in ('psichic_plus', 'boltz2') for m in ctx['main_config']['docking_scenario_methods']),
                  'ext': "tar.gz",
              }
  
