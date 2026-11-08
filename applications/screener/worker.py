@@ -8,7 +8,7 @@ import sys
 import threading
 
 from applications.scoring.contracts import Ownership, Task, loads
-from applications.scoring.evidence import atomic_pointer
+from applications.scoring.evidence import Artifact, Receipt, atomic_pointer
 from applications.scoring.processes import exclusive, process_identity
 from applications.scoring.runtime import checksum, verify_inputs
 from applications.scoring.worker import own, publish
@@ -39,14 +39,20 @@ def execute(map_path, entry_key, output):
         else:
             atomic_pointer(directory / 'external-started.json', process_identity(os.getpid()))
             own(directory, registered=True)
-        found = []
+        found = {}
         for transfer in (directory / 'transfers').iterdir():
             path = transfer / 'receipt.json'
-            if path.is_file() and loads(path.read_bytes())['task']['attempt_id'] == task.attempt_id:
-                found.append(transfer)
+            if not path.is_file():
+                continue
+            receipt = Receipt.from_json(path.read_bytes())
+            if receipt.task.attempt_id == task.attempt_id:
+                for artifact in receipt.artifacts:
+                    if Artifact.from_file(transfer, artifact.role, artifact.path) != artifact:
+                        raise ValueError('Artifact digest/size mismatch')
+                found[receipt.sha256] = transfer
         if len(found) != 1:
             raise ValueError('No unique qualified receipt. Missing runtime evidence remains pending.')
-        shutil.copytree(found[0], output / 'receipt')
+        shutil.copytree(next(iter(found.values())), output / 'receipt')
 
 
 def main():
