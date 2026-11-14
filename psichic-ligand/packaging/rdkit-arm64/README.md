@@ -41,3 +41,5 @@ The existing `clique_pe` check retains its absolute tolerance of `1e-6` and zero
 The contract panel does not prove arbitrary molecular inputs or biological accuracy.
 
 The [Spark qualification summary](proof.json) records the source/package hashes, exact model-library versions, unchanged contract result and archive-guard fault probe.
+
+The copied recipe retains the conda-forge contributors' [BSD-3-Clause notice](LICENSE).

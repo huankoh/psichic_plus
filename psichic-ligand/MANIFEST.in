@@ -2,3 +2,4 @@ include packaging/rdkit-arm64/meta.yaml
 include packaging/rdkit-arm64/build.sh
 include packaging/rdkit-arm64/pyproject.patch
 include packaging/rdkit-arm64/conda_build_config.yaml
+include packaging/rdkit-arm64/LICENSE
