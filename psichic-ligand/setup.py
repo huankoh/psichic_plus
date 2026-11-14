@@ -1,6 +1,7 @@
 """Build native extensions against the activated conda-forge environment."""
 
 import ast
+import hashlib
 import importlib.util
 import json
 import os
@@ -9,13 +10,15 @@ import re
 import shlex
 import shutil
 import sys
+import tarfile
 from dataclasses import dataclass
 from pathlib import Path
+from urllib.parse import unquote, urlparse
 
 from pybind11.setup_helpers import Pybind11Extension, build_ext
 from setuptools import setup
 
-SUPPORTED_SUBDIRS = ("linux-64", "osx-arm64")
+SUPPORTED_SUBDIRS = ("linux-64", "osx-arm64", "linux-aarch64")
 RDKIT_LIBRARIES = (
     "RDKitGraphMol",
     "RDKitSmilesParse",
@@ -72,6 +75,43 @@ def conda_subdir() -> str:
     return f"{sys.platform}-{machine}"
 
 
+def matches_arm_recipe(record: dict, subdir: str) -> bool:
+    if subdir != "linux-aarch64" or record.get("subdir") != subdir:
+        return False
+    location = urlparse(record.get("url", ""))
+    if location.scheme != "file":
+        return False
+    import yaml
+
+    package = Path(unquote(location.path))
+    recipe = ROOT / "packaging/rdkit-arm64"
+    try:
+        with package.open("rb") as stream:
+            if hashlib.file_digest(stream, "sha256").hexdigest() != record["sha256"]:
+                return False
+        with tarfile.open(package, "r:bz2") as archive:
+            for name in ("meta.yaml", "build.sh", "pyproject.patch"):
+                archived = "meta.yaml.template" if name == "meta.yaml" else name
+                member = archive.getmember(f"info/recipe/{archived}")
+                if not member.isfile():
+                    return False
+                with archive.extractfile(member) as stream:
+                    if stream.read() != (recipe / name).read_bytes():
+                        return False
+            with archive.extractfile("info/recipe/conda_build_config.yaml") as stream:
+                actual = yaml.safe_load(stream)
+            if not isinstance(actual, dict):
+                return False
+            expected = yaml.safe_load((recipe / "conda_build_config.yaml").read_text())
+            if any(
+                actual.get(key) != str(values[0]) for key, values in expected.items()
+            ):
+                return False
+    except (KeyError, OSError, tarfile.TarError, yaml.YAMLError):
+        return False
+    return True
+
+
 def locate_rdkit_toolchain() -> RdkitToolchain:
     subdir = conda_subdir()
     if subdir not in SUPPORTED_SUBDIRS:
@@ -94,7 +134,10 @@ def locate_rdkit_toolchain() -> RdkitToolchain:
         r
         for r in records
         if r.get("version") == release
-        and "conda-forge" in (r.get("channel", "") + r.get("url", ""))
+        and (
+            "conda-forge" in (r.get("channel", "") + r.get("url", ""))
+            or matches_arm_recipe(r, subdir)
+        )
     ]
     if not matching or not header.is_file():
         spec = importlib.util.find_spec("rdkit")
@@ -106,7 +149,7 @@ def locate_rdkit_toolchain() -> RdkitToolchain:
             else "nothing"
         )
         raise BuildEnvironmentError(
-            f"psichic-ligand needs conda-forge rdkit={release} in {prefix} (found: {found}). "
+            f"psichic-ligand needs conda-forge rdkit={release} or the checked ARM recipe in {prefix} (found: {found}). "
             "Create the env from environment_*.yml."
         )
     config = (dev / "lib/cmake/rdkit/rdkit-config.cmake").read_text()

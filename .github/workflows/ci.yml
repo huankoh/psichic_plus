@@ -34,7 +34,7 @@ jobs:
     needs: portability
     if: needs.portability.result == 'success'
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 45
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.portability.outputs.matrix) }}
@@ -55,6 +55,13 @@ jobs:
       - name: Configure Linux shared library search
         if: runner.os == 'Linux'
         run: echo "LD_LIBRARY_PATH=$CONDA_PREFIX/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" >> "$GITHUB_ENV"
+      - name: Build the pinned ARM dependencies
+        if: matrix.subdir == 'linux-aarch64'
+        run: |
+          conda install -n base --override-channels -c conda-forge -y conda-build conda-libmamba-solver
+          CPU_COUNT=4 conda run -n base conda build --override-channels -c conda-forge --no-anaconda-upload --package-format 1 --output-folder "$RUNNER_TEMP/rdkit-packages" --croot "$RUNNER_TEMP/rdkit-build" psichic-ligand/packaging/rdkit-arm64
+          conda install --override-channels -c conda-forge --freeze-installed -y "$RUNNER_TEMP"/rdkit-packages/linux-aarch64/rdkit-2024.03.3-py312*.tar.bz2
+          MAX_JOBS=4 pip install --no-build-isolation --no-deps -r requirements_cpu_arm64.txt
       - name: Build the installed package
         run: pip install --no-build-isolation --no-deps ./psichic-ligand
       - name: Verify byte identity
@@ -72,7 +79,7 @@ jobs:
           pip install pytest PyYAML
           pip install --no-deps chembl-structure-pipeline==1.2.4 papyrus-structure-pipeline==0.0.5
       - name: Test the package and platform declarations
-        run: python -m pytest -q psichic-ligand/tests tests/test_env_pins.py tests/test_supported_platforms.py
+        run: python -m pytest -q psichic-ligand/tests tests/test_env_pins.py tests/test_supported_platforms.py tests/test_arm_recipe.py
 
   e2e:
     needs: [portability, ligand]
