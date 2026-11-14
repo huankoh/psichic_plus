@@ -44,6 +44,7 @@ def test_all_environments_share_one_pinned_stack():
         )
         if variant == "cpu_arm64":
             assert "rdkit" not in conda
+            assert conda["libboost-python"] == "1.84.0"
             assert {k: conda[k] for k in CONDA_PINS if k != "rdkit"} == {
                 k: v for k, v in CONDA_PINS.items() if k != "rdkit"
             }

@@ -10,6 +10,7 @@ No RDKit chemistry code changes.
 Run from the repository root on Linux ARM with conda or micromamba available.
 Create the model environment from `environment_cpu_arm64.yml` first.
 This environment deliberately omits RDKit until the local package is built.
+It explicitly pins Boost.Python 1.84 because installing a local Conda archive by filename does not resolve the archive's runtime dependencies.
 The PyTorch extensions are compiled after PyTorch is installed.
 
 ```bash
