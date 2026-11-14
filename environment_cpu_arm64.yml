@@ -1,0 +1,27 @@
+name: psichic_fp
+channels:
+  - conda-forge
+dependencies:
+  - python=3.12
+  - numpy=1.26.4
+  - pandas=2.2.2
+  - scipy=1.13.1
+  - libboost-devel=1.84.0
+  - cxx-compiler=1.11.0
+  - setuptools=80.9.0
+  - pybind11=3.1.0
+  - pyyaml>=6,<7
+  - biopython
+  - pip
+  - pip:
+      - torch==2.6.0
+      - torch-geometric==2.7.0
+      - fair-esm==2.0.0
+      - biopandas
+      - timeout_decorator
+      - py3Dmol
+      - umap-learn
+      - plotly
+      - mplcursors
+      - lifelines
+      - reprint

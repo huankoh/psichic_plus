@@ -32,7 +32,7 @@ def test_all_environments_share_one_pinned_stack():
         if isinstance(n, ast.Assign) and isinstance(n.value, ast.Constant)
     }
     assert CONDA_PINS["rdkit"] == constants["RDKIT_RELEASE"]
-    for variant in ("cpu", "gpu", "osx"):
+    for variant in ("cpu", "gpu", "osx", "cpu_arm64"):
         env = yaml.safe_load((ROOT / f"environment_{variant}.yml").read_text())
         assert env["channels"] == (
             ["nvidia", "conda-forge"] if variant == "gpu" else ["conda-forge"]
@@ -42,11 +42,29 @@ def test_all_environments_share_one_pinned_stack():
             for p in env["dependencies"]
             if isinstance(p, str) and "=" in p
         )
-        assert {k: conda[k] for k in CONDA_PINS} == CONDA_PINS
+        if variant == "cpu_arm64":
+            assert "rdkit" not in conda
+            assert {k: conda[k] for k in CONDA_PINS if k != "rdkit"} == {
+                k: v for k, v in CONDA_PINS.items() if k != "rdkit"
+            }
+            recipe = (
+                ROOT / "psichic-ligand/packaging/rdkit-arm64/meta.yaml"
+            ).read_text()
+            assert '{% set version = "2024.03.3" %}' in recipe
+        else:
+            assert {k: conda[k] for k in CONDA_PINS} == CONDA_PINS
         requirements = next(
             p["pip"] for p in env["dependencies"] if isinstance(p, dict)
         )
         pip = dict(p.split("==", 1) for p in requirements if "==" in p)
+        if variant == "cpu_arm64":
+            extensions = dict(
+                line.split("==", 1)
+                for line in (ROOT / "requirements_cpu_arm64.txt")
+                .read_text()
+                .splitlines()
+            )
+            pip.update(extensions)
         assert {k: pip[k].split("+")[0] for k in PIP_PINS} == PIP_PINS
         for p in requirements:
             assert p.split("=")[0].lower() not in {

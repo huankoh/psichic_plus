@@ -5,8 +5,8 @@ It ports `mol_featurizer` from `huankoh/psichic-plus@3c8e5e4` without changing i
 
 ## Current build status
 
-The package supports `linux-64` and `osx-arm64` with the pinned environments.
-CI verifies the contract on Linux CPU, Linux CUDA, and Apple Silicon macOS environments.
+The package supports `linux-64`, `osx-arm64`, and the checked Linux ARM source build with the pinned environments.
+CI verifies the contract on Linux CPU, Linux ARM CPU, Linux CUDA, and Apple Silicon macOS environments.
 The contract checks `clique_pe` against independently calculated random-walk values with an absolute tolerance of 0.000001.
 It checks normalized SMILES and the remaining graph values exactly.
 Windows and Intel macOS are not supported by the pinned build dependencies.
@@ -14,6 +14,7 @@ Windows and Intel macOS are not supported by the pinned build dependencies.
 ## Build and verify
 
 Create and activate the root `environment_*.yml` environment for a supported platform.
+Linux ARM uses the separate [pinned RDKit source build](packaging/rdkit-arm64/README.md) and `environment_cpu_arm64.yml`.
 Run these commands from the repository root.
 
 ```bash
@@ -21,7 +22,7 @@ pip install --no-build-isolation --no-deps ./psichic-ligand
 python -m psichic_ligand verify
 ```
 
-Builds require Python 3.12, conda-forge RDKit 2024.03.3 with C++ headers, Boost headers matching RDKit's build, pybind11 3.1.0, and a C++17 compiler.
+Builds require Python 3.12, RDKit 2024.03.3 with C++ headers from conda-forge or the checked ARM recipe, Boost headers matching RDKit's build, pybind11 3.1.0, and a C++17 compiler.
 The build checks RDKit provenance and Boost compatibility before invoking a compiler.
 Every installation recompiles both extensions so a previous environment's object files cannot leak into the new build.
 Imports check the loaded RDKit version and path and load installed extensions without compiling.

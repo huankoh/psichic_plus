@@ -13,5 +13,10 @@
     "subdir": "osx-arm64",
     "os": "macos-15",
     "env": "osx"
+  },
+  {
+    "subdir": "linux-aarch64",
+    "os": "ubuntu-24.04-arm",
+    "env": "cpu_arm64"
   }
 ]

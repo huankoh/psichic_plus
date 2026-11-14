@@ -1,0 +1,49 @@
+{
+  "machine": "MU00249812.monash.edu",
+  "platform": "linux-aarch64",
+  "source": {
+    "url": "https://github.com/rdkit/rdkit/archive/Release_2024_03_3.tar.gz",
+    "sha256": "52f79c6bf1d446cdb5c86a35de655d96bad0c52a5f4ecbe15f08eaf334e6f76a",
+    "recipe_revision": "5a836e8b064e226f4f8b76b2ff3f3242f00fe0fe"
+  },
+  "package": {
+    "filename": "rdkit-2024.03.3-py312hc939610_0.tar.bz2",
+    "sha256": "f57ab31a19d20c9c20586d1e96c6b88c47353f35962732e8738644974600e5ba",
+    "origin": "local conda recipe build"
+  },
+  "recipe_files": {
+    "pyproject.patch": "9a128a4f96d6e2bc4f2be517273e68e2906d4fd94bdeab407d2a74df8c9500fc",
+    "build.sh": "8e3321628fea21ecec10465609c5685c1c196833e4e471db53c46e2e41482e65",
+    "conda_build_config.yaml": "808fe83294ff03915d8f787d7a1b677760cb0a2138f3fc99860e008adf1b0610",
+    "meta.yaml": "735eeb5a6256f634da64859f7a421d98696fd1e2eacabfd06ffff133df0ae2cb"
+  },
+  "contract": {
+    "exit_code": 0,
+    "checked": 2242,
+    "graph_bytes": "exact except the existing clique_pe check",
+    "clique_pe_atol": 1e-06,
+    "clique_pe_rtol": 0,
+    "command": "python -I -m psichic_ligand verify",
+    "versions": {
+      "python": "3.12.15",
+      "rdkit": "2024.03.3",
+      "torch": "2.6.0+cpu"
+    }
+  },
+  "package_tests": {
+    "command": "python -m pytest -q psichic-ligand/tests tests/test_env_pins.py tests/test_supported_platforms.py tests/test_arm_recipe.py",
+    "passed": 423,
+    "warnings": 1,
+    "warning_kind": "third-party PyG deprecation"
+  },
+  "limitations": [
+    "Finite recorded input panel, not proof for every molecule or scientific accuracy.",
+    "Compilation and inference use the same RDKit release and ligand algorithms; no new expected values or platform tolerances were introduced."
+  ],
+  "fault_probe": {
+    "variant": "removed package-archive digest comparison",
+    "rejected": true,
+    "unchanged_clean_source_passed": true
+  },
+  "kind": "qualification_summary"
+}
